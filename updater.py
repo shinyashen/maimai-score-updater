@@ -45,12 +45,12 @@ async def _(bot: NoneBot, ev: CQEvent):
             password = result[2]
             qrcode_credentials = result[3]
         else:
-            await bot.finish(ev, '未绑定任何账号，请先绑定微信二维码信息与水鱼账号。', at_sender=True)
+            await bot.send(ev, '未绑定任何账号，请先绑定微信二维码信息与水鱼账号。', at_sender=True)
 
         if not username or not password:
-            await bot.finish(ev, '请绑定水鱼账号信息。', at_sender=True)
+            await bot.send(ev, '请绑定水鱼账号信息。', at_sender=True)
         if not qrcode_credentials:
-            await bot.finish(ev, '请绑定微信二维码信息。', at_sender=True)
+            await bot.send(ev, '请绑定微信二维码信息。', at_sender=True)
 
         update_tasks = []
         identifier = PlayerIdentifier(credentials=qrcode_credentials)

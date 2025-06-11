@@ -1,13 +1,17 @@
 import aiosqlite
 import os
-import asyncio
 
 
 from . import log
+from pathlib import Path
+
+
+Root: Path = Path(__file__).parent
+Database: Path = Root / 'users.db'
 
 
 class UserDatabase:
-    def __init__(self, db_name='users.db'):
+    def __init__(self, db_name=Database.resolve()):
         self.db_name = db_name
         self.conn = None
 
@@ -78,53 +82,3 @@ class UserDatabase:
         if self.conn:
             await self.conn.close()
             print("数据库连接已关闭")
-
-# 异步使用示例
-
-
-async def main():
-    # 创建数据库实例
-    db = UserDatabase()
-
-    try:
-        # 连接数据库
-        await db.connect()
-
-        # 添加用户（密码会自动加密）
-        await db.add_user("123456789", "张三", "zhangsan123", "SGW12345")
-        await db.add_user("987654321", "李四", "lisi456", "SGW67890")
-
-        # 查询所有用户（不显示密码）
-        await db.get_all_users()
-
-        # 验证用户
-        print("\n验证用户:")
-        await db.authenticate_user("123456789", "zhangsan123")  # 正确密码
-        await db.authenticate_user("123456789", "wrongpass")    # 错误密码
-
-        # 更新信息
-        await db.update_username("123456789", "张老三")
-        await db.update_password("123456789", "newpassword123")
-        await db.update_sgwcmaid("123456789", "SGW_NEW_ID")
-
-        # 获取单个用户信息
-        print("\n获取用户信息:")
-        user = await db.get_user("123456789")
-        if user:
-            qq, username, _, sgwcmaid = user
-            print(f"QQ号: {qq}, 用户名: {username}, SGWCMAID: {sgwcmaid}")
-
-        # 删除用户
-        await db.delete_user("987654321")
-
-        # 显示最终数据
-        print("\n最终用户列表:")
-        await db.get_all_users()
-
-    finally:
-        # 确保关闭数据库连接
-        await db.close()
-
-# 运行异步主函数
-if __name__ == "__main__":
-    asyncio.run(main())
