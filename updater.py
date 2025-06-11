@@ -78,8 +78,8 @@ async def _(bot: NoneBot, ev: CQEvent):
         if len(args) == 1 and args[0] == '帮助':
             await bot.send(ev, '绑定微信/bindwx <SGWCMAID...>: 绑定微信公众号二维码，请对二维码进行识别后复制识别的内容，以SGWCMAID开头', at_sender=True)
         elif len(args) == 1 and args[0].startswith('SGWCMAID'):
-            identifier = await maimai.qrcode(qrcode=args[0]).credentials
-            await db.update(qq=qqid, sgwcmaid=identifier)
+            identifier = await maimai.qrcode(qrcode=args[0])
+            await db.update(qq=qqid, sgwcmaid=identifier.credentials)
             await bot.send(ev, '绑定微信二维码信息成功。', at_sender=True)
         else:
             await bot.send(ev, '请提供正确格式的二维码文本内容。', at_sender=True)

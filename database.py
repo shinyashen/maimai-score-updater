@@ -30,8 +30,8 @@ class UserDatabase:
         create_table_sql = """
         CREATE TABLE IF NOT EXISTS users (
             qq TEXT PRIMARY KEY,     -- QQ号作为主键
-            username TEXT NOT NULL,  -- 用户名
-            password TEXT NOT NULL,  -- 加密后的密码
+            username TEXT            -- 用户名
+            password TEXT            -- 加密后的密码
             sgwcmaid TEXT            -- SGWCMAID
         );
         """
