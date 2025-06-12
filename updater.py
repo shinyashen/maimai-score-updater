@@ -9,6 +9,7 @@ from typing import List
 
 from nonebot import NoneBot
 from nonebot.message import CanceledException
+from hoshino import priv
 from hoshino.typing import CQEvent
 from .database import UserDatabase
 from . import log, sv, SV_HELP
