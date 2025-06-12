@@ -9,7 +9,6 @@ from typing import List
 
 from nonebot import NoneBot
 from nonebot.message import CanceledException
-from hoshino import priv
 from hoshino.typing import CQEvent
 from .database import UserDatabase
 from . import log, sv, SV_HELP
@@ -104,7 +103,7 @@ async def _(bot: NoneBot, ev: CQEvent):
         args: List[str] = ev.message.extract_plain_text().strip().split()
         if len(args) == 1 and args[0] == '帮助':
             await bot.send(ev, '绑定微信/bindwx(不带斜杠) <SGWCMAID...>: 绑定微信公众号二维码，请对二维码进行识别后复制识别的内容，以SGWCMAID开头，仅能在私聊绑定', at_sender=False)
-        elif priv.get_user_priv(ev) == priv.PRIVATE:
+        elif ev['message_type'] == 'private':
             if len(args) == 1 and args[0].startswith('SGWCMAID'):
                 identifier = await maimai.qrcode(qrcode=args[0])
                 await db.update(qq=qqid, sgwcmaid=identifier.credentials)
@@ -138,7 +137,7 @@ async def _(bot: NoneBot, ev: CQEvent):
         args: List[str] = ev.message.extract_plain_text().strip().split()
         if len(args) == 1 and args[0] == '帮助':
             await bot.send(ev, '绑定水鱼/binddf(不带斜杠) <水鱼账号> <水鱼密码>: 绑定水鱼账号信息，仅能在私聊绑定', at_sender=False)
-        elif priv.get_user_priv(ev) == priv.PRIVATE:
+        elif ev['message_type'] == 'private':
             if len(args) == 2:
                 username = args[0]
                 password = args[1]
