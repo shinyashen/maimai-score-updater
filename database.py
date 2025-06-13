@@ -35,7 +35,7 @@ class UserDatabase:
         create_table_sql = """
         CREATE TABLE IF NOT EXISTS status (
             qq TEXT PRIMARY KEY,          -- QQ号作为主键
-            autoupdate INTEGER NOT NULL,  -- 自动更新标志
+            autoupdate INTEGER,           -- 自动更新标志
             login INTEGER,                -- 登录标志(0未登录1已登录)
             logouttime INTEGER,           -- 已登出时间(min)
             lastupdate TEXT,              -- 最后成功更新时间
