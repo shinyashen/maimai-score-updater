@@ -1,10 +1,10 @@
-import asyncio
-import traceback
+import asyncio, traceback
 from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerIdentifier, AimeServerError, TitleServerError, ArcadeError, InvalidPlayerIdentifierError, PrivacyLimitationError
 from httpx import HTTPError
 from PIL import Image
 from pyzbar.pyzbar import decode
 from typing import List
+from datetime import datetime
 
 
 from nonebot import NoneBot
@@ -45,11 +45,11 @@ async def _(bot: NoneBot, ev: CQEvent):
             qqid = ev.user_id
             db = UserDatabase()
             await db.connect()
-            result = await db.get_user(qqid)
-            if result:
-                username = result[1]
-                password = result[2]
-                qrcode_credentials = result[3]
+            user = await db.get_user(qqid)
+            if user:
+                username = user[1]
+                password = user[2]
+                qrcode_credentials = user[3]
             else:
                 await bot.finish(ev, '未绑定任何账号，请先绑定微信二维码信息与水鱼账号', at_sender=False)
 
@@ -57,6 +57,17 @@ async def _(bot: NoneBot, ev: CQEvent):
                 await bot.finish(ev, '请绑定水鱼账号信息', at_sender=False)
             if not qrcode_credentials:
                 await bot.finish(ev, '请绑定微信二维码信息', at_sender=False)
+
+            status = await db.get_status(qqid)
+            if not status:
+                await db.update_status(qq=qqid, autoupdate=0, login=0, logouttime=0)
+                await bot.send(ev, '正在上传分数，请稍等...', at_sender=False)
+            elif status[4] is None or status[5] is None:
+                await bot.send(ev, '正在上传分数，请稍等...', at_sender=False)
+            else:
+                lastupdate = status[4]
+                updatetype = status[5]
+                await bot.send(ev, f'正在上传分数，请稍等...\n上次上传时间: {lastupdate}\n上传方式: {"自动" if updatetype == 1 else "手动"}', at_sender=False)
 
             update_tasks = []
             identifier = PlayerIdentifier(credentials=qrcode_credentials)
@@ -67,7 +78,9 @@ async def _(bot: NoneBot, ev: CQEvent):
 
             await asyncio.gather(*update_tasks)
             log.info("分数上传成功")
-            await bot.send(ev, '上传分数至水鱼成功！', at_sender=False)
+            timenow = datetime.now().strftime(r"%Y-%m-%d %H:%M:%S")
+            await db.update_status(qq=qqid, lastupdate=timenow, updatetype=0)
+            await bot.send(ev, f'上传分数至水鱼成功！\n上传时间: {timenow}', at_sender=False)
         except CanceledException:
             pass
         except IndexError as e:
@@ -106,7 +119,7 @@ async def _(bot: NoneBot, ev: CQEvent):
         elif ev['message_type'] == 'private':
             if len(args) == 1 and args[0].startswith('SGWCMAID'):
                 identifier = await maimai.qrcode(qrcode=args[0])
-                await db.update(qq=qqid, sgwcmaid=identifier.credentials)
+                await db.update_user(qq=qqid, sgwcmaid=identifier.credentials)
                 await bot.send(ev, '绑定微信二维码信息成功', at_sender=False)
             else:
                 await bot.send(ev, '请提供正确格式的二维码文本内容', at_sender=False)
@@ -141,7 +154,7 @@ async def _(bot: NoneBot, ev: CQEvent):
             if len(args) == 2:
                 username = args[0]
                 password = args[1]
-                await db.update(qq=qqid, username=username, password=password)
+                await db.update_user(qq=qqid, username=username, password=password)
                 await bot.send(ev, '绑定水鱼账号信息成功', at_sender=False)
             else:
                 await bot.send(ev, '请提供正确格式的水鱼账号信息', at_sender=False)

@@ -1,5 +1,4 @@
 import aiosqlite
-import os
 
 
 from . import log
@@ -16,30 +15,38 @@ class UserDatabase:
         self.conn = None
 
     async def connect(self):
-        """异步连接到数据库，如果不存在则创建"""
-        self.is_new_db = not os.path.exists(self.db_name)
+        """连接到数据库，进行可能的初始化操作"""
         self.conn = await aiosqlite.connect(self.db_name)
-
-        # 如果是新数据库，则初始化表结构
-        if self.is_new_db:
-            await self.initialize_database()
+        await self.initialize_database()
         log.info(f"成功连接到数据库: {self.db_name}")
 
     async def initialize_database(self):
         """初始化数据库表结构"""
         create_table_sql = """
         CREATE TABLE IF NOT EXISTS users (
-            qq TEXT PRIMARY KEY,     -- QQ号作为主键
-            username TEXT,           -- 用户名
-            password TEXT,           -- 加密后的密码
-            sgwcmaid TEXT            -- SGWCMAID
+            qq TEXT PRIMARY KEY,          -- QQ号作为主键
+            username TEXT,                -- 用户名
+            password TEXT,                -- 加密后的密码
+            sgwcmaid TEXT                 -- SGWCMAID
         );
         """
         await self.conn.execute(create_table_sql)
         await self.conn.commit()
-        log.info("数据库初始化完成，已创建 users 表")
+        create_table_sql = """
+        CREATE TABLE IF NOT EXISTS status (
+            qq TEXT PRIMARY KEY,          -- QQ号作为主键
+            autoupdate INTEGER NOT NULL,  -- 自动更新标志
+            login INTEGER,                -- 登录标志(0未登录1已登录)
+            logouttime INTEGER,           -- 已登出时间(min)
+            lastupdate TEXT,              -- 最后成功更新时间
+            updatetype INTEGER            -- 登录类型(0手动1自动)
+        );
+        """
+        await self.conn.execute(create_table_sql)
+        await self.conn.commit()
+        log.info("数据库初始化完成")
 
-    async def update(self, qq: str, username: str = None, password: str = None, sgwcmaid: str = None):
+    async def update_user(self, qq: str, username: str = None, password: str = None, sgwcmaid: str = None):
         """更新用户信息"""
         # 检查QQ号是否已存在
         insert_sql = """
@@ -66,6 +73,34 @@ class UserDatabase:
 
         return user
 
+    async def update_status(self, qq: str, autoupdate: int = None, login: int = None, logouttime: int = None, lastupdate: str = None, updatetype: int = None):
+        """更新用户状态信息"""
+        insert_sql = """
+        INSERT OR REPLACE INTO status (qq, autoupdate, login, logouttime, lastupdate, updatetype)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(qq) DO UPDATE SET
+            autoupdate = COALESCE(excluded.autoupdate, status.autoupdate),
+            login = COALESCE(excluded.login, status.login),
+            logouttime = COALESCE(excluded.logouttime, status.logouttime),
+            lastupdate = COALESCE(excluded.lastupdate, status.lastupdate),
+            updatetype = COALESCE(excluded.updatetype, status.updatetype)
+        """
+        await self.conn.execute(insert_sql, (qq, autoupdate, login, logouttime, lastupdate, updatetype))
+        await self.conn.commit()
+        log.info(f"已更新用户{qq}的状态信息")
+
+    async def get_status(self, qq: str) -> tuple:
+        """根据QQ号获取用户状态信息"""
+        query = "SELECT qq, autoupdate, login, logouttime, lastupdate, updatetype FROM status WHERE qq = ?"
+        async with self.conn.execute(query, (qq,)) as cursor:
+            status = await cursor.fetchone()
+
+        if not status:
+            log.warning(f"未找到用户{qq}的状态信息")
+            return None
+
+        return status
+
     async def delete_user(self, qq: str):
         """删除用户"""
         delete_sql = "DELETE FROM users WHERE qq = ?"
@@ -81,4 +116,4 @@ class UserDatabase:
         """异步关闭数据库连接"""
         if self.conn:
             await self.conn.close()
-            print("数据库连接已关闭")
+            log.info("数据库连接已关闭")
