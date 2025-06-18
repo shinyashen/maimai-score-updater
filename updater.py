@@ -31,6 +31,13 @@ async def is_login(qrcode_credentials: str) -> bool:
         return False
 
 
+async def check_df_valid(username: str, password: str):
+    """检查水鱼账号是否有效"""
+    login_json = {"username": username, "password": password}
+    resp = await maimai._client.post("https://www.diving-fish.com/api/maimaidxprober/login", json=login_json)
+    DivingFishProvider()._check_response_player(resp)
+
+
 async def execute_update(user: tuple, db: UserDatabase):
     """执行分数上传"""
     qqid = user[0]
@@ -281,10 +288,7 @@ async def _(bot: NoneBot, ev: CQEvent):
             if len(args) == 2:
                 username = args[0]
                 password = args[1]
-
-                # 验证账户是否有效
-                player = PlayerIdentifier(username=username, credentials=password)
-                await maimai.players(player, DivingFishProvider())
+                await check_df_valid(username, password)
 
                 await db.update_user(qq=qqid, username=username, password=password)
                 msg = '绑定水鱼账号信息成功'
