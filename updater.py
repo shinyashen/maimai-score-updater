@@ -177,7 +177,7 @@ async def _(bot: NoneBot, ev: CQEvent):
                 password = user[2]
                 qrcode_credentials = user[3]
             else:
-                msg = '未绑定任何账号，请先绑定微信二维码信息与水鱼账号'
+                msg = '未绑定任何账号，请先绑定微信二维码信息与水鱼账号，查看帮助请输入“上传分数帮助”'
                 return
             if not username or not password:
                 msg = '请绑定水鱼账号信息'
@@ -185,11 +185,27 @@ async def _(bot: NoneBot, ev: CQEvent):
             if not qrcode_credentials:
                 msg = '请绑定微信二维码信息'
                 return
-            msg = await update_score(qqid, username, password, qrcode_credentials, 0, db, bot, ev)
-        except IndexError as e:
-            traceback.print_exc()
-            log.error(f"发生意外错误: {e}")
-            msg = '阿偶，出现了一些问题，请再试一次？'
+
+            max_retries = 5
+            retry_count = 0
+            while retry_count <= max_retries:
+                try:
+                    msg = await update_score(qqid, username, password, qrcode_credentials, 0, db, bot, ev)
+                    break  # 成功则退出循环
+                except IndexError as e:
+                    retry_count += 1
+                    if retry_count > max_retries:
+                        # 重试次数用尽，记录错误
+                        traceback.print_exc()
+                        log.error(f"IndexError 重试失败 ({max_retries}次): {e}")
+                        msg = '阿偶，出现了一些问题，请稍后再试'
+                        break
+
+                    # 指数退避延迟 (0.5s, 1s, 2s, 4s, 8s)
+                    delay = (0.5 * (2 ** (retry_count - 1)))
+                    log.warning(f"IndexError 发生，第 {retry_count}/{max_retries} 次重试 (等待 {delay}s)")
+                    await asyncio.sleep(delay)
+
         except (TitleServerError, ArcadeError, HTTPError) as e:
             traceback.print_exc()
             log.error(f"Title服务器错误: {e}")
