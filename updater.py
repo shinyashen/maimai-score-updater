@@ -4,7 +4,7 @@ from httpx import HTTPError
 from PIL import Image
 from pyzbar.pyzbar import decode
 from typing import List
-from datetime import datetime, timedelta
+from datetime import datetime
 
 
 from nonebot import NoneBot, on_startup
@@ -18,6 +18,7 @@ diving_provider = DivingFishProvider()
 bindwx = sv.on_prefix(['bindwx', '绑定微信'])
 binddf = sv.on_prefix(['binddf', '绑定水鱼'])
 update = sv.on_prefix(['wmupdate', '上传分数'])
+autoupdate = sv.on_suffix(['autoupdate', '自动上传'])
 
 
 async def is_login(qrcode_credentials: str) -> bool:
@@ -80,10 +81,7 @@ async def auto_update_loop():
     log.info(f"已初始化所有用户状态")
 
     while True:
-        now = datetime.now()
-        next_minute = (now.replace(second=0, microsecond=0) + timedelta(minutes=1))
-        wait_seconds = (next_minute - now).total_seconds()
-        await asyncio.sleep(wait_seconds)  # 等待到下一个整分钟
+        await asyncio.sleep(60)  # 等待一分钟
         log.info("开始执行自动上传分数任务")
 
         # 更新用户登录状态
@@ -274,3 +272,24 @@ async def _(bot: NoneBot, ev: CQEvent):
         await bot.send(ev, '绑定水鱼失败，请反馈给开发者！', at_sender=False)
     finally:
         await db.close()
+
+
+@autoupdate
+async def _(bot: NoneBot, ev: CQEvent):
+    args = ev.message.extract_plain_text().strip().lower()
+    if args == '开启':
+        db = UserDatabase()
+        await db.connect()
+        qqid = ev.user_id
+        db.update_status(qq=qqid, autoupdate=1, login=0, logouttime=0)
+        msg = '已开启自动上传分数'
+    elif args == '关闭':
+        db = UserDatabase()
+        await db.connect()
+        qqid = ev.user_id
+        db.update_status(qq=qqid, autoupdate=0, login=0, logouttime=0)
+        msg = '已关闭自动上传分数'
+    else:
+        msg = '请提供正确的指令格式'
+
+    await bot.send(ev, msg)
