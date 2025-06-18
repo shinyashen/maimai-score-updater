@@ -120,7 +120,6 @@ class UserDatabase:
                 users = await cursor.fetchall()
 
             if not users:
-                log.info("没有需要更新的用户")
                 return None
 
             return users
@@ -131,7 +130,6 @@ class UserDatabase:
                 users = await cursor.fetchall()
 
             if not users:
-                log.info("没有需要更新的用户")
                 return None
 
             return users
@@ -142,21 +140,19 @@ class UserDatabase:
                 users = await cursor.fetchall()
 
             if not users:
-                log.info("没有需要更新的用户")
                 return None
 
             return users
 
-    async def autoupdate_user_status(self, mode: int = 0):
-        if mode == 1:  # 初始化所有用户状态
-            sql = """
-            UPDATE status
-            SET login = 0, logouttime = 0
-            WHERE autoupdate = 1
-            """
-            await self.conn.execute(sql)
-            await self.conn.commit()
-            log.info("已初始化所有用户的状态信息")
+    async def init_user_status(self):
+        """初始化用户状态信息"""
+        sql = """
+        UPDATE status
+        SET login = 0, logouttime = 0
+        WHERE autoupdate = 1
+        """
+        await self.conn.execute(sql)
+        await self.conn.commit()
 
     async def delete_user(self, qq: str):
         """删除用户"""

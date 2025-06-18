@@ -70,14 +70,14 @@ async def auto_update_loop():
     await db.connect()
     prev_users = await db.get_autoupdate_user(2)
     tasks = []
-    for user in prev_users:
-        task = asyncio.create_task(execute_update(user, db))
-        tasks.append(task)
-    if tasks:
+    if prev_users:
+        for user in prev_users:
+            task = asyncio.create_task(execute_update(user, db))
+            tasks.append(task)
         await asyncio.gather(*tasks)
-    db.autoupdate_user_status(1)  # 初始化状态
+    await db.init_user_status()  # 初始化状态
     await db.close()
-    log.info(f"已初始化用户状态，共更新 {len(tasks)} 个用户")
+    log.info(f"已初始化所有用户状态")
 
     while True:
         now = datetime.now()
@@ -90,10 +90,10 @@ async def auto_update_loop():
         await db.connect()
         users = await db.get_autoupdate_user(1)
         tasks = []
-        for user in users:
-            task = asyncio.create_task(update_user_status(user, db))
-            tasks.append(task)
-        if tasks:
+        if users:
+            for user in users:
+                task = asyncio.create_task(update_user_status(user, db))
+                tasks.append(task)
             await asyncio.gather(*tasks)
         await db.close()
         log.info(f"已更新用户登录状态，共更新 {len(tasks)} 个用户")
@@ -102,10 +102,10 @@ async def auto_update_loop():
         await db.connect()
         users = await db.get_autoupdate_user(3)
         tasks = []
-        for user in users:
-            task = asyncio.create_task(execute_update(user, db))
-            tasks.append(task)
-        if tasks:
+        if users:
+            for user in users:
+                task = asyncio.create_task(execute_update(user, db))
+                tasks.append(task)
             await asyncio.gather(*tasks)
         await db.close()
         log.info(f"已自动上传分数，共上传了 {len(tasks)} 个用户的数据")
