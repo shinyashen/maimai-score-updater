@@ -203,7 +203,7 @@ async def _(bot: NoneBot, ev: CQEvent):
 
                     # 指数退避延迟 (0.5s, 1s, 2s, 4s, 8s)
                     delay = (0.5 * (2 ** (retry_count - 1)))
-                    log.warning(f"IndexError 发生，第 {retry_count}/{max_retries} 次重试 (等待 {delay}s)")
+                    log.warning(f"发生IndexError，第 {retry_count}/{max_retries} 次重试 (等待 {delay}s)")
                     await asyncio.sleep(delay)
 
         except (TitleServerError, ArcadeError, HTTPError) as e:
@@ -235,30 +235,32 @@ async def _(bot: NoneBot, ev: CQEvent):
         await db.connect()
 
         args: List[str] = ev.message.extract_plain_text().strip().split()
+        msg = None
         if len(args) == 1 and args[0] == '帮助':
-            await bot.send(ev, '绑定微信/bindwx(不带斜杠) <SGWCMAID...>: 绑定微信公众号二维码，请对二维码进行识别后复制识别的内容，以SGWCMAID开头，仅能在私聊绑定', at_sender=False)
+            msg = '绑定微信/bindwx(不带斜杠) <SGWCMAID...>: 绑定微信公众号二维码，请对二维码进行识别后复制识别的内容，以SGWCMAID开头，仅能在私聊绑定'
         elif ev['message_type'] == 'private':
             if len(args) == 1 and args[0].startswith('SGWCMAID'):
                 identifier = await maimai.qrcode(qrcode=args[0])
                 await db.update_user(qq=qqid, sgwcmaid=identifier.credentials)
-                await bot.send(ev, '绑定微信二维码信息成功', at_sender=False)
+                msg = '绑定微信二维码信息成功'
             else:
-                await bot.send(ev, '请提供正确格式的二维码文本内容', at_sender=False)
+                msg = '请提供正确格式的二维码文本内容，以SGWCMAID开头'
         else:
-            await bot.send(ev, '只有私聊才能进行绑定操作哦', at_sender=False)
+            msg = '只有私聊才能进行绑定操作哦'
     except AimeServerError as e:
         traceback.print_exc()
         log.error(f"Aime服务器错误: {e}")
-        await bot.send(ev, '二维码内容无效或者已过期，请重试', at_sender=False)
+        msg = '二维码内容无效或者已过期，请重试'
     except TitleServerError as e:
         traceback.print_exc()
         log.error(f"Title服务器错误: {e}")
-        await bot.send(ev, '连接到服务器时出现了一些问题，请稍后再试', at_sender=False)
+        msg = '连接到服务器时出现了一些问题，请稍后再试'
     except Exception as e:
         traceback.print_exc()
         log.error(f"发生意外错误: {e}")
-        await bot.send(ev, '绑定微信失败，请反馈给开发者！', at_sender=False)
+        msg = '绑定微信失败，请反馈给开发者！'
     finally:
+        await bot.send(ev, msg, at_sender=False)
         await db.close()
 
 
@@ -270,23 +272,42 @@ async def _(bot: NoneBot, ev: CQEvent):
         await db.connect()
 
         args: List[str] = ev.message.extract_plain_text().strip().split()
+        msg = None
         if len(args) == 1 and args[0] == '帮助':
-            await bot.send(ev, '绑定水鱼/binddf(不带斜杠) <水鱼账号> <水鱼密码>: 绑定水鱼账号信息，仅能在私聊绑定', at_sender=False)
+            msg = '绑定水鱼/binddf(不带斜杠) <水鱼账号> <水鱼密码>: 绑定水鱼账号信息，仅能在私聊绑定'
         elif ev['message_type'] == 'private':
             if len(args) == 2:
                 username = args[0]
                 password = args[1]
+
+                # 验证账户是否有效
+                player = PlayerIdentifier(username=username, credentials=password)
+                await maimai.players(player, DivingFishProvider())
+
                 await db.update_user(qq=qqid, username=username, password=password)
-                await bot.send(ev, '绑定水鱼账号信息成功', at_sender=False)
+                msg = '绑定水鱼账号信息成功'
             else:
-                await bot.send(ev, '请提供正确格式的水鱼账号信息', at_sender=False)
+                msg = '请提供正确格式的水鱼账号信息'
         else:
-            await bot.send(ev, '只有私聊才能进行绑定操作哦', at_sender=False)
+            msg = '只有私聊才能进行绑定操作哦'
+    except HTTPError as e:
+        traceback.print_exc()
+        log.error(f"水鱼服务器错误: {e}")
+        msg = '连接到服务器时出现了一些问题，请稍后再试'
+    except InvalidPlayerIdentifierError as e:
+        traceback.print_exc()
+        log.error(f"水鱼账户无效: {e}")
+        msg = '水鱼账户无效，可能是账户或者密码输错了，请重新输入'
+    except PrivacyLimitationError as e:
+        traceback.print_exc()
+        log.error(f"隐私限制错误: {e}")
+        msg = '你没有同意水鱼的用户协议，无法完成该操作'
     except Exception as e:
         traceback.print_exc()
         log.error(f"发生意外错误: {e}")
-        await bot.send(ev, '绑定水鱼失败，请反馈给开发者！', at_sender=False)
+        msg = '绑定水鱼失败，请反馈给开发者！'
     finally:
+        await bot.send(ev, msg, at_sender=False)
         await db.close()
 
 
