@@ -281,15 +281,15 @@ async def _(bot: NoneBot, ev: CQEvent):
         db = UserDatabase()
         await db.connect()
         qqid = ev.user_id
-        db.update_status(qq=qqid, autoupdate=1, login=0, logouttime=0)
+        await db.update_status(qq=qqid, autoupdate=1, login=0, logouttime=0)
         msg = '已开启自动上传分数'
     elif args == '关闭':
         db = UserDatabase()
         await db.connect()
         qqid = ev.user_id
-        db.update_status(qq=qqid, autoupdate=0, login=0, logouttime=0)
+        await db.update_status(qq=qqid, autoupdate=0, login=0, logouttime=0)
         msg = '已关闭自动上传分数'
     else:
         msg = '请提供正确的指令格式'
 
-    await bot.send(ev, msg)
+    await bot.send(ev, msg, at_sender=False)
