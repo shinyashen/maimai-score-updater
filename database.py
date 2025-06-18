@@ -18,7 +18,6 @@ class UserDatabase:
         """连接到数据库，进行可能的初始化操作"""
         self.conn = await aiosqlite.connect(self.db_name)
         await self.initialize_database()
-        log.info(f"成功连接到数据库: {self.db_name}")
 
     async def initialize_database(self):
         """初始化数据库表结构"""
@@ -44,7 +43,6 @@ class UserDatabase:
         """
         await self.conn.execute(create_table_sql)
         await self.conn.commit()
-        log.info("数据库初始化完成")
 
     async def update_user(self, qq: str, username: str = None, password: str = None, sgwcmaid: str = None):
         """更新用户信息"""
@@ -59,7 +57,6 @@ class UserDatabase:
         """
         await self.conn.execute(insert_sql, (qq, username, password, sgwcmaid))
         await self.conn.commit()
-        log.info(f"已更新用户{qq}的信息")
 
     async def get_user(self, qq: str) -> tuple:
         """根据QQ号获取用户信息"""
@@ -99,7 +96,6 @@ class UserDatabase:
         """
         await self.conn.execute(insert_sql, (qq, autoupdate, login, logouttime, lastupdate, updatetype))
         await self.conn.commit()
-        log.info(f"已更新用户{qq}的状态信息")
 
     async def get_status(self, qq: str) -> tuple:
         """根据QQ号获取用户状态信息"""
@@ -169,4 +165,3 @@ class UserDatabase:
         """异步关闭数据库连接"""
         if self.conn:
             await self.conn.close()
-            log.info("数据库连接已关闭")
