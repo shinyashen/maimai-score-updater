@@ -27,7 +27,7 @@ async def is_login(qrcode_credentials: str) -> bool:
         identifier = PlayerIdentifier(credentials=qrcode_credentials)
         player = await ArcadeProvider().get_player(identifier, maimai)
         return player.is_login
-    except (ArcadeError, InvalidPlayerIdentifierError):
+    except Exception:
         return False
 
 
