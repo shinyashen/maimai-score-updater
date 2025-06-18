@@ -63,7 +63,7 @@ class UserDatabase:
 
     async def get_user(self, qq: str) -> tuple:
         """根据QQ号获取用户信息"""
-        query = "SELECT qq, username, password, sgwcmaid FROM users WHERE qq = ?"
+        query = "SELECT * FROM users WHERE qq = ?"
         async with self.conn.execute(query, (qq,)) as cursor:
             user = await cursor.fetchone()
 
@@ -72,6 +72,18 @@ class UserDatabase:
             return None
 
         return user
+
+    async def get_user_credential(self, qq: str) -> str:
+        """根据QQ号获取用户凭证信息"""
+        query = "SELECT sgwcmaid FROM users WHERE qq = ?"
+        async with self.conn.execute(query, (qq,)) as cursor:
+            sgwcmaid = await cursor.fetchone()
+
+        if not sgwcmaid:
+            log.warning(f"未找到用户{qq}的凭证信息")
+            return None
+
+        return sgwcmaid[0]
 
     async def update_status(self, qq: str, autoupdate: int = None, login: int = None, logouttime: int = None, lastupdate: str = None, updatetype: int = None):
         """更新用户状态信息"""
@@ -91,7 +103,7 @@ class UserDatabase:
 
     async def get_status(self, qq: str) -> tuple:
         """根据QQ号获取用户状态信息"""
-        query = "SELECT qq, autoupdate, login, logouttime, lastupdate, updatetype FROM status WHERE qq = ?"
+        query = "SELECT * FROM status WHERE qq = ?"
         async with self.conn.execute(query, (qq,)) as cursor:
             status = await cursor.fetchone()
 
@@ -100,6 +112,51 @@ class UserDatabase:
             return None
 
         return status
+
+    async def get_autoupdate_user(self, mode: int = 0):
+        if mode == 1:  # 返回所有需要自动更新的用户的状态信息
+            query = "SELECT * FROM status WHERE autoupdate = 1"
+            async with self.conn.execute(query) as cursor:
+                users = await cursor.fetchall()
+
+            if not users:
+                log.info("没有需要更新的用户")
+                return None
+
+            return users
+
+        elif mode == 2:  # 返回login状态为1的用户信息
+            query = "SELECT * FROM users WHERE qq IN (SELECT qq FROM status WHERE autoupdate = 1 AND login = 1)"
+            async with self.conn.execute(query) as cursor:
+                users = await cursor.fetchall()
+
+            if not users:
+                log.info("没有需要更新的用户")
+                return None
+
+            return users
+
+        elif mode == 3:  # 返回login状态为0同时logouttime为3的用户信息
+            query = "SELECT * FROM users WHERE qq IN (SELECT qq FROM status WHERE autoupdate = 1 AND login = 0 AND logouttime = 3)"
+            async with self.conn.execute(query) as cursor:
+                users = await cursor.fetchall()
+
+            if not users:
+                log.info("没有需要更新的用户")
+                return None
+
+            return users
+
+    async def autoupdate_user_status(self, mode: int = 0):
+        if mode == 1:  # 初始化所有用户状态
+            sql = """
+            UPDATE status
+            SET login = 0, logouttime = 0
+            WHERE autoupdate = 1
+            """
+            await self.conn.execute(sql)
+            await self.conn.commit()
+            log.info("已初始化所有用户的状态信息")
 
     async def delete_user(self, qq: str):
         """删除用户"""
