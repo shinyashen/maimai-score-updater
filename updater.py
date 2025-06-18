@@ -37,6 +37,8 @@ async def execute_update(user: tuple, db: UserDatabase):
     username = user[1]
     password = user[2]
     qrcode_credentials = user[3]
+    if not username or not password or not qrcode_credentials:
+        log.error(f"用户 {qqid} 的信息不完整")
     try:
         await update_score(qqid, username, password, qrcode_credentials, 1, db)
     except Exception as e:
