@@ -1,5 +1,5 @@
 import asyncio, traceback
-from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerIdentifier, AimeServerError, TitleServerError, ArcadeError, InvalidPlayerIdentifierError, PrivacyLimitationError
+from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerIdentifier, AimeServerError, TitleServerNetworkError, TitleServerBlockedError, InvalidPlayerIdentifierError, PrivacyLimitationError
 from httpx import HTTPError
 from PIL import Image
 from pyzbar.pyzbar import decode
@@ -215,7 +215,7 @@ async def _(bot: NoneBot, ev: CQEvent):
                     log.warning(f"发生IndexError，第 {retry_count}/{max_retries} 次重试 (等待 {delay}s)")
                     await asyncio.sleep(delay)
 
-        except (TitleServerError, ArcadeError, HTTPError) as e:
+        except (TitleServerNetworkError, TitleServerBlockedError, HTTPError) as e:
             traceback.print_exc()
             log.error(f"Title服务器错误: {e}")
             msg = '连接到服务器时出现了一些问题，请稍后再试'
@@ -249,7 +249,7 @@ async def _(bot: NoneBot, ev: CQEvent):
             msg = '绑定微信/bindwx(不带斜杠) <SGWCMAID...>: 绑定微信公众号二维码，请对二维码进行识别后复制识别的内容，以SGWCMAID开头，仅能在私聊绑定'
         elif ev['message_type'] == 'private':
             if len(args) == 1 and args[0].startswith('SGWCMAID'):
-                identifier = await maimai.qrcode(qrcode=args[0])
+                identifier = await ArcadeProvider().get_identifier(args[0], maimai)
                 await db.update_user(qq=qqid, sgwcmaid=identifier.credentials)
                 msg = '绑定微信二维码信息成功'
             else:
@@ -260,7 +260,7 @@ async def _(bot: NoneBot, ev: CQEvent):
         traceback.print_exc()
         log.error(f"Aime服务器错误: {e}")
         msg = '二维码内容无效或者已过期，请重试'
-    except TitleServerError as e:
+    except (TitleServerNetworkError, TitleServerBlockedError) as e:
         traceback.print_exc()
         log.error(f"Title服务器错误: {e}")
         msg = '连接到服务器时出现了一些问题，请稍后再试'
