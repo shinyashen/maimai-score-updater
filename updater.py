@@ -265,6 +265,7 @@ async def _(bot: NoneBot, ev: CQEvent):
                         msg = '请提供正确格式的二维码文本内容，以SGWCMAID开头'
                 else:
                     msg = '只有私聊才能进行绑定操作哦'
+                break
 
             except (TitleServerNetworkError, HTTPError) as e:
                 retry_count += 1
