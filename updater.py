@@ -119,7 +119,7 @@ async def auto_update_loop():
     log.info(f"已初始化所有用户状态")
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(auto_update, 'cron', (db,), hour='0-2,10-23', minute='*')  # 每日10点到次日2点执行自动上传
+    scheduler.add_job(auto_update, 'cron', (db,), hour='0-1,10-23', minute='*')  # 每日10点到次日2点执行自动上传
     scheduler.start()
 
 
@@ -206,24 +206,24 @@ async def _(bot: NoneBot, ev: CQEvent):
                 try:
                     msg = await update_score(qqid, username, password, qrcode_credentials, 0, db, bot, ev)
                     break  # 成功则退出循环
-                except IndexError as e:
+                except (TitleServerNetworkError, HTTPError) as e:
                     retry_count += 1
                     if retry_count > max_retries:
                         # 重试次数用尽，记录错误
                         traceback.print_exc()
-                        log.error(f"IndexError 重试失败 ({max_retries}次): {e}")
+                        log.error(f"重试失败 ({max_retries}次): {e}")
                         msg = '阿偶，出现了一些问题，请稍后再试'
                         break
 
                     # 指数退避延迟 (0.5s, 1s, 2s, 4s, 8s)
                     delay = (0.5 * (2 ** (retry_count - 1)))
-                    log.warning(f"发生IndexError，第 {retry_count}/{max_retries} 次重试 (等待 {delay}s)")
+                    log.warning(f"第 {retry_count}/{max_retries} 次重试 (等待 {delay}s)")
                     await asyncio.sleep(delay)
 
-        except (TitleServerNetworkError, TitleServerBlockedError, HTTPError) as e:
+        except TitleServerBlockedError as e:
             traceback.print_exc()
             log.error(f"Title服务器错误: {e}")
-            msg = '连接到服务器时出现了一些问题，请稍后再试'
+            msg = '主机被华立屏蔽了喵，请反馈给开发者！'
         except InvalidPlayerIdentifierError as e:
             traceback.print_exc()
             log.error(f"水鱼账户无效: {e}")
@@ -244,31 +244,50 @@ async def _(bot: NoneBot, ev: CQEvent):
 @bindwx
 async def _(bot: NoneBot, ev: CQEvent):
     try:
-        qqid = ev.user_id
-        db = UserDatabase()
-        await db.connect()
+        max_retries = 5
+        retry_count = 0
+        while retry_count <= max_retries:
+            try:
+                qqid = ev.user_id
+                db = UserDatabase()
+                await db.connect()
 
-        args: List[str] = ev.message.extract_plain_text().strip().split()
-        msg = None
-        if len(args) == 1 and args[0] == '帮助':
-            msg = '绑定微信/bindwx(不带斜杠) <SGWCMAID...>: 绑定微信公众号二维码，请对二维码进行识别后复制识别的内容，以SGWCMAID开头，仅能在私聊绑定'
-        elif ev['message_type'] == 'private':
-            if len(args) == 1 and args[0].startswith('SGWCMAID'):
-                identifier = await ArcadeProvider().get_identifier(args[0], maimai)
-                await db.update_user(qq=qqid, sgwcmaid=identifier.credentials)
-                msg = '绑定微信二维码信息成功'
-            else:
-                msg = '请提供正确格式的二维码文本内容，以SGWCMAID开头'
-        else:
-            msg = '只有私聊才能进行绑定操作哦'
+                args: List[str] = ev.message.extract_plain_text().strip().split()
+                msg = None
+                if len(args) == 1 and args[0] == '帮助':
+                    msg = '绑定微信/bindwx(不带斜杠) <SGWCMAID...>: 绑定微信公众号二维码，请对二维码进行识别后复制识别的内容，以SGWCMAID开头，仅能在私聊绑定'
+                elif ev['message_type'] == 'private':
+                    if len(args) == 1 and args[0].startswith('SGWCMAID'):
+                        identifier = await ArcadeProvider().get_identifier(args[0], maimai)
+                        await db.update_user(qq=qqid, sgwcmaid=identifier.credentials)
+                        msg = '绑定微信二维码信息成功'
+                    else:
+                        msg = '请提供正确格式的二维码文本内容，以SGWCMAID开头'
+                else:
+                    msg = '只有私聊才能进行绑定操作哦'
+
+            except (TitleServerNetworkError, HTTPError) as e:
+                retry_count += 1
+                if retry_count > max_retries:
+                    # 重试次数用尽，记录错误
+                    traceback.print_exc()
+                    log.error(f"重试失败 ({max_retries}次): {e}")
+                    msg = '连接到服务器时出现了一些问题，请稍后再试'
+                    break
+
+                # 指数退避延迟 (0.5s, 1s, 2s, 4s, 8s)
+                delay = (0.5 * (2 ** (retry_count - 1)))
+                log.warning(f"第 {retry_count}/{max_retries} 次重试 (等待 {delay}s)")
+                await asyncio.sleep(delay)
+
     except AimeServerError as e:
         traceback.print_exc()
         log.error(f"Aime服务器错误: {e}")
         msg = '二维码内容无效或者已过期，请重试'
-    except (TitleServerNetworkError, TitleServerBlockedError) as e:
+    except TitleServerBlockedError as e:
         traceback.print_exc()
         log.error(f"Title服务器错误: {e}")
-        msg = '连接到服务器时出现了一些问题，请稍后再试'
+        msg = '主机被华立屏蔽了喵，请反馈给开发者！'
     except Exception as e:
         traceback.print_exc()
         log.error(f"发生意外错误: {e}")
