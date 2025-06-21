@@ -120,8 +120,8 @@ class UserDatabase:
 
             return users
 
-        elif mode == 2:  # 返回login状态为1的用户信息
-            query = "SELECT * FROM users WHERE qq IN (SELECT qq FROM status WHERE autoupdate = 1 AND login = 1)"
+        elif mode == 2:  # 返回之前检测到登录状态但未执行上传的用户信息
+            query = "SELECT * FROM users WHERE qq IN (SELECT qq FROM status WHERE autoupdate = 1 AND (login = 1 OR (login = 0 AND logouttime > 0)))"
             async with self.conn.execute(query) as cursor:
                 users = await cursor.fetchall()
 

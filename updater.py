@@ -5,6 +5,7 @@ from PIL import Image
 from pyzbar.pyzbar import decode
 from typing import List
 from datetime import datetime
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
 
 
 from nonebot import NoneBot, on_startup
@@ -73,6 +74,34 @@ async def update_user_status(user: tuple, db: UserDatabase):
                 await db.update_status(qq=qq, login=0, logouttime=0)
 
 
+async def auto_update(db: UserDatabase):
+    log.info("开始执行自动上传分数任务")
+
+    # 更新用户登录状态
+    await db.connect()
+    users = await db.get_autoupdate_user(1)
+    tasks = []
+    if users:
+        for user in users:
+            task = asyncio.create_task(update_user_status(user, db))
+            tasks.append(task)
+        await asyncio.gather(*tasks)
+    await db.close()
+    log.info(f"已更新用户登录状态，共更新 {len(tasks)} 个用户")
+
+    # 为符合要求的用户执行自动上传分数操作
+    await db.connect()
+    users = await db.get_autoupdate_user(3)
+    tasks = []
+    if users:
+        for user in users:
+            task = asyncio.create_task(execute_update(user, db))
+            tasks.append(task)
+        await asyncio.gather(*tasks)
+    await db.close()
+    log.info(f"已自动上传分数，共上传了 {len(tasks)} 个用户的数据")
+
+
 async def auto_update_loop():
     """自动上传分数循环任务"""
     # 将之前处于登录状态的用户先执行一次自动上传
@@ -89,33 +118,9 @@ async def auto_update_loop():
     await db.close()
     log.info(f"已初始化所有用户状态")
 
-    while True:
-        await asyncio.sleep(60)  # 等待一分钟
-        log.info("开始执行自动上传分数任务")
-
-        # 更新用户登录状态
-        await db.connect()
-        users = await db.get_autoupdate_user(1)
-        tasks = []
-        if users:
-            for user in users:
-                task = asyncio.create_task(update_user_status(user, db))
-                tasks.append(task)
-            await asyncio.gather(*tasks)
-        await db.close()
-        log.info(f"已更新用户登录状态，共更新 {len(tasks)} 个用户")
-
-        # 为符合要求的用户执行自动上传分数操作
-        await db.connect()
-        users = await db.get_autoupdate_user(3)
-        tasks = []
-        if users:
-            for user in users:
-                task = asyncio.create_task(execute_update(user, db))
-                tasks.append(task)
-            await asyncio.gather(*tasks)
-        await db.close()
-        log.info(f"已自动上传分数，共上传了 {len(tasks)} 个用户的数据")
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(auto_update, 'cron', hour='0-2,10-23', minute='*')  # 每日10点到次日2点执行自动上传
+    scheduler.start()
 
 
 @on_startup
