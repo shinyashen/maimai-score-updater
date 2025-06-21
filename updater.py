@@ -119,7 +119,7 @@ async def auto_update_loop():
     log.info(f"已初始化所有用户状态")
 
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(auto_update, 'cron', hour='0-2,10-23', minute='*')  # 每日10点到次日2点执行自动上传
+    scheduler.add_job(auto_update, 'cron', (db,), hour='0-2,10-23', minute='*')  # 每日10点到次日2点执行自动上传
     scheduler.start()
 
 
