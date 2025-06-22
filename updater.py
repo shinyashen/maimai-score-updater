@@ -143,18 +143,18 @@ async def decode_qrcode(image_path: str) -> str:
         raise e
 
 
-async def update_score(qqid: str, username: str, password: str, qrcode_credentials:str, updatetype: int, db: UserDatabase, special_flag = False, bot: NoneBot = None, ev: CQEvent = None) -> str:
+async def update_score(qqid: str, username: str, password: str, qrcode_credentials:str, updatetype: int, db: UserDatabase, special_flag: bool = False, repeat_flag: bool = False, bot: NoneBot = None, ev: CQEvent = None) -> str:
     """上传分数主函数"""
     status = await db.get_status(qqid)
     if not status:
         await db.update_status(qq=qqid, autoupdate=0, login=0, logouttime=0)
-        if updatetype == 0:
+        if updatetype == 0 and not repeat_flag:
             if special_flag:
                 await bot.send(ev, '正在帮你导，你先别急', at_sender=False)
             else:
                 await bot.send(ev, '正在上传分数，请稍等...', at_sender=False)
     elif status[4] is None or status[5] is None:
-        if updatetype == 0:
+        if updatetype == 0 and not repeat_flag:
             if special_flag:
                 await bot.send(ev, '正在帮你导，你先别急', at_sender=False)
             else:
@@ -162,7 +162,7 @@ async def update_score(qqid: str, username: str, password: str, qrcode_credentia
     else:
         lastupdate = status[4]
         type = status[5]
-        if updatetype == 0:
+        if updatetype == 0 and not repeat_flag:
             if special_flag:
                 await bot.send(ev, f'正在帮你导，你先别急\n你上次啥时候导的：{lastupdate}\n怎么导的：{"自动档" if type == 1 else "手动档"}', at_sender=False)
             else:
@@ -223,7 +223,7 @@ async def _(bot: NoneBot, ev: CQEvent):
             retry_count = 0
             while retry_count <= max_retries:
                 try:
-                    msg = await update_score(qqid, username, password, qrcode_credentials, 0, db, special_flag, bot, ev)
+                    msg = await update_score(qqid, username, password, qrcode_credentials, 0, db, special_flag, (retry_count > 0), bot, ev)
                     break  # 成功则退出循环
                 except (TitleServerNetworkError, HTTPError) as e:
                     retry_count += 1
