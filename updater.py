@@ -18,7 +18,7 @@ diving_provider = DivingFishProvider()
 
 bindwx = sv.on_prefix(['bindwx', '绑定微信'])
 binddf = sv.on_prefix(['binddf', '绑定水鱼'])
-update = sv.on_prefix(['wmupdate', '上传分数'])
+update = sv.on_prefix(['wmupdate', '上传分数', '导'])
 autoupdate = sv.on_suffix(['autoupdate', '自动上传'])
 
 
