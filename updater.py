@@ -143,21 +143,30 @@ async def decode_qrcode(image_path: str) -> str:
         raise e
 
 
-async def update_score(qqid: str, username: str, password: str, qrcode_credentials:str, updatetype: int, db: UserDatabase, bot: NoneBot = None, ev: CQEvent = None) -> str:
+async def update_score(qqid: str, username: str, password: str, qrcode_credentials:str, updatetype: int, db: UserDatabase, special_flag = False, bot: NoneBot = None, ev: CQEvent = None) -> str:
     """上传分数主函数"""
     status = await db.get_status(qqid)
     if not status:
         await db.update_status(qq=qqid, autoupdate=0, login=0, logouttime=0)
         if updatetype == 0:
-            await bot.send(ev, '正在上传分数，请稍等...', at_sender=False)
+            if special_flag:
+                await bot.send(ev, '正在帮你导，你先别急', at_sender=False)
+            else:
+                await bot.send(ev, '正在上传分数，请稍等...', at_sender=False)
     elif status[4] is None or status[5] is None:
         if updatetype == 0:
-            await bot.send(ev, '正在上传分数，请稍等...', at_sender=False)
+            if special_flag:
+                await bot.send(ev, '正在帮你导，你先别急', at_sender=False)
+            else:
+                await bot.send(ev, '正在上传分数，请稍等...', at_sender=False)
     else:
         lastupdate = status[4]
         type = status[5]
         if updatetype == 0:
-            await bot.send(ev, f'正在上传分数，请稍等...\n上次上传时间: {lastupdate}\n上传方式: {"自动" if type == 1 else "手动"}', at_sender=False)
+            if special_flag:
+                await bot.send(ev, f'正在帮你导，你先别急\n你上次啥时候导的：{lastupdate}\n怎么导的：{"自动档" if type == 1 else "手动档"}', at_sender=False)
+            else:
+                await bot.send(ev, f'正在上传分数，请稍等...\n上次上传时间: {lastupdate}\n上传方式: {"自动" if type == 1 else "手动"}', at_sender=False)
 
     update_tasks = []
     identifier = PlayerIdentifier(credentials=qrcode_credentials)
@@ -171,7 +180,10 @@ async def update_score(qqid: str, username: str, password: str, qrcode_credentia
     timenow = datetime.now().strftime(r"%Y-%m-%d %H:%M:%S")
     await db.update_status(qq=qqid, lastupdate=timenow, updatetype=updatetype)
 
-    return f'上传分数至水鱼成功！\n上传时间: {timenow}'
+    if special_flag:
+        return f'水鱼接受了你的导！\n你这次导的时间为: {timenow}'
+    else:
+        return f'上传分数至水鱼成功！\n上传时间: {timenow}'
 
 
 @update
@@ -181,6 +193,7 @@ async def _(bot: NoneBot, ev: CQEvent):
         await bot.send(ev, SV_HELP, at_sender=False)
     elif len(args) == 0:
         msg = None
+        special_flag = (ev.raw_message == '导')
         try:
             qqid = ev.user_id
             db = UserDatabase()
@@ -192,19 +205,25 @@ async def _(bot: NoneBot, ev: CQEvent):
                 qrcode_credentials = user[3]
             else:
                 msg = '未绑定任何账号，请先绑定微信二维码信息与水鱼账号，查看帮助请输入“上传分数帮助”'
+                if special_flag:
+                    msg = '几把怎么连导都不会。。。想知道怎么导？对我说“导帮助”喵'
                 return
             if not username or not password:
                 msg = '请绑定水鱼账号信息'
+                if special_flag:
+                    msg = '没绑水鱼账号你怎么导。。。'
                 return
             if not qrcode_credentials:
                 msg = '请绑定微信二维码信息'
+                if special_flag:
+                    msg = '没绑微信二维码你怎么导。。。'
                 return
 
             max_retries = 5
             retry_count = 0
             while retry_count <= max_retries:
                 try:
-                    msg = await update_score(qqid, username, password, qrcode_credentials, 0, db, bot, ev)
+                    msg = await update_score(qqid, username, password, qrcode_credentials, 0, db, special_flag, bot, ev)
                     break  # 成功则退出循环
                 except (TitleServerNetworkError, HTTPError) as e:
                     retry_count += 1
@@ -213,6 +232,8 @@ async def _(bot: NoneBot, ev: CQEvent):
                         traceback.print_exc()
                         log.error(f"重试失败 ({max_retries}次): {e}")
                         msg = '阿偶，出现了一些问题，请稍后再试'
+                        if special_flag:
+                            msg = '我导不动了，你等会再导喵'
                         break
 
                     # 指数退避延迟 (0.5s, 1s, 2s, 4s, 8s)
