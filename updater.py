@@ -6,6 +6,7 @@ from pyzbar.pyzbar import decode
 from typing import List
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.events import EVENT_JOB_ERROR
 
 
 from nonebot import NoneBot, on_startup
@@ -102,6 +103,13 @@ async def auto_update(db: UserDatabase):
     log.info(f"已自动上传分数，共上传了 {len(tasks)} 个用户的数据")
 
 
+def job_listener(Event):
+    scheduler = AsyncIOScheduler()
+    if Event.exception:
+        log.error(f"自动上传分数任务执行失败: {Event.exception}")
+        scheduler.reschedule_job(Event.job_id, trigger='cron', hour='0-1,10-23', minute='*')
+
+
 async def auto_update_loop():
     """自动上传分数循环任务"""
     # 将之前处于登录状态的用户先执行一次自动上传
@@ -120,6 +128,7 @@ async def auto_update_loop():
 
     scheduler = AsyncIOScheduler()
     scheduler.add_job(auto_update, 'cron', (db,), hour='0-1,10-23', minute='*')  # 每日10点到次日2点执行自动上传
+    scheduler.add_listener(job_listener, EVENT_JOB_ERROR)
     scheduler.start()
 
 
