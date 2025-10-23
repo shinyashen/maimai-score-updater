@@ -1,3 +1,2 @@
 maimai-py
-pyzbar
 aiosqlite

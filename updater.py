@@ -1,8 +1,6 @@
 import asyncio, traceback
 from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerIdentifier, AimeServerError, TitleServerNetworkError, TitleServerBlockedError, InvalidPlayerIdentifierError, PrivacyLimitationError
 from httpx import HTTPError
-from PIL import Image
-from pyzbar.pyzbar import decode
 from typing import List
 from datetime import datetime
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -138,20 +136,6 @@ async def _():
     asyncio.create_task(auto_update_loop())
 
 
-async def decode_qrcode(image_path: str) -> str:
-    """从图片中识别二维码"""
-    try:
-        image = Image.open(image_path)
-        decoded_objects = decode(image)
-        if decoded_objects:
-            return decoded_objects[0].data.decode('utf-8')
-        else:
-            raise ValueError("图片中不存在二维码！")
-    except Exception as e:
-        log.error(f"解析二维码时发生错误: {e}")
-        raise e
-
-
 async def update_score(qqid: str, username: str, password: str, qrcode_credentials:str, updatetype: int, db: UserDatabase, special_flag: bool = False, repeat_flag: bool = False, bot: NoneBot = None, ev: CQEvent = None) -> str:
     """上传分数主函数"""
     status = await db.get_status(qqid)
@@ -234,16 +218,10 @@ async def _(bot: NoneBot, ev: CQEvent):
                 try:
                     msg = await update_score(qqid, username, password, qrcode_credentials, 0, db, special_flag, (retry_count > 0), bot, ev)
                     break  # 成功则退出循环
-                except (TitleServerNetworkError, HTTPError) as e:
+                except Exception as e:
                     retry_count += 1
                     if retry_count > max_retries:
-                        # 重试次数用尽，记录错误
-                        traceback.print_exc()
-                        log.error(f"重试失败 ({max_retries}次): {e}")
-                        msg = '阿偶，出现了一些问题，请稍后再试'
-                        if special_flag:
-                            msg = '我导不动了，你等会再导喵'
-                        break
+                        raise e
 
                     # 指数退避延迟 (0.5s, 1s, 2s, 4s, 8s)
                     delay = (0.5 * (2 ** (retry_count - 1)))
@@ -297,14 +275,10 @@ async def _(bot: NoneBot, ev: CQEvent):
                     msg = '只有私聊才能进行绑定操作哦'
                 break
 
-            except (TitleServerNetworkError, HTTPError) as e:
+            except Exception as e:
                 retry_count += 1
                 if retry_count > max_retries:
-                    # 重试次数用尽，记录错误
-                    traceback.print_exc()
-                    log.error(f"重试失败 ({max_retries}次): {e}")
-                    msg = '连接到服务器时出现了一些问题，请稍后再试'
-                    break
+                    raise e
 
                 # 指数退避延迟 (0.5s, 1s, 2s, 4s, 8s)
                 delay = (0.5 * (2 ** (retry_count - 1)))
