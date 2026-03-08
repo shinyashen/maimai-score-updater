@@ -146,8 +146,12 @@ async def _(bot: NoneBot, ev: CQEvent):
             msg = '你没有同意水鱼的用户协议，无法完成该操作'
         except Exception as e:
             traceback.print_exc()
-            log.error(f"发生意外错误: {e}")
-            msg = '上传分数失败，请反馈给开发者！'
+            if '400' in str(e) or '401' in str(e):
+                log.error(f"水鱼账户无效: {e}")
+                msg = '水鱼账户无效，可能是账户或者密码输错了，请重新绑定水鱼账号密码'
+            else:
+                log.error(f"发生意外错误: {e}")
+                msg = '上传分数失败，请反馈给开发者！'
         finally:
             await bot.send(ev, msg, at_sender=False)
 
