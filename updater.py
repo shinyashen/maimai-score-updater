@@ -5,19 +5,22 @@ from typing import List
 from datetime import datetime
 
 
-from nonebot import NoneBot, on_startup
+from nonebot import NoneBot
 from hoshino.typing import CQEvent
 from .database import UserDatabase
 from . import log, sv, SV_HELP
 
 maimai = MaimaiClient(timeout=60)
 diving_provider = DivingFishProvider()
-db = UserDatabase().get_instance()
 
 bindwx = sv.on_prefix(['bindwx', '绑定微信'])
 binddf = sv.on_prefix(['binddf', '绑定水鱼'])
 update = sv.on_prefix(['wmupdate', '上传分数', '导'])
 autoupdate = sv.on_suffix(['autoupdate', '自动上传'])
+
+
+async def get_db() -> UserDatabase:
+    return await UserDatabase.get_instance()
 
 
 async def check_df_valid(username: str, password: str):
@@ -95,8 +98,7 @@ async def _(bot: NoneBot, ev: CQEvent):
         special_flag = (ev.raw_message == '导')
         try:
             qqid = ev.user_id
-            db = UserDatabase()
-            await db.connect()
+            db = await get_db()
             user = await db.get_user(qqid)
             if user:
                 username = user[1]
@@ -158,8 +160,7 @@ async def _(bot: NoneBot, ev: CQEvent):
         while retry_count <= max_retries:
             try:
                 qqid = ev.user_id
-                db = UserDatabase()
-                await db.connect()
+                db = await get_db()
 
                 args: List[str] = ev.message.extract_plain_text().strip().split()
                 msg = None
@@ -190,10 +191,6 @@ async def _(bot: NoneBot, ev: CQEvent):
         traceback.print_exc()
         log.error(f"Aime服务器错误: {e}")
         msg = '二维码内容无效或者已过期，请重试'
-    except TitleServerBlockedError as e:
-        traceback.print_exc()
-        log.error(f"Title服务器错误: {e}")
-        msg = '主机被华立屏蔽了喵，请反馈给开发者！'
     except Exception as e:
         traceback.print_exc()
         log.error(f"发生意外错误: {e}")
@@ -206,8 +203,7 @@ async def _(bot: NoneBot, ev: CQEvent):
 async def _(bot: NoneBot, ev: CQEvent):
     try:
         qqid = ev.user_id
-        db = UserDatabase()
-        await db.connect()
+        db = await get_db()
 
         args: List[str] = ev.message.extract_plain_text().strip().split()
         msg = None
