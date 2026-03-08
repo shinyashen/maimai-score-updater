@@ -3,11 +3,9 @@ from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerId
 from httpx import HTTPError
 from typing import List
 from datetime import datetime
-from apscheduler.schedulers.asyncio import AsyncIOScheduler
-from apscheduler.events import EVENT_JOB_ERROR
 
 
-from nonebot import NoneBot, on_startup
+from nonebot import NoneBot
 from hoshino.typing import CQEvent
 from .database import UserDatabase
 from . import log, sv, SV_HELP
@@ -19,16 +17,6 @@ bindwx = sv.on_prefix(['bindwx', '绑定微信'])
 binddf = sv.on_prefix(['binddf', '绑定水鱼'])
 update = sv.on_prefix(['wmupdate', '上传分数', '导'])
 autoupdate = sv.on_suffix(['autoupdate', '自动上传'])
-
-
-async def is_login(qrcode_credentials: str) -> bool:
-    """检查玩家是否登录"""
-    try:
-        identifier = PlayerIdentifier(credentials=qrcode_credentials)
-        player = await ArcadeProvider().get_player(identifier, maimai)
-        return player.is_login
-    except Exception:
-        return False
 
 
 async def check_df_valid(username: str, password: str):
@@ -51,89 +39,6 @@ async def execute_update(user: tuple, db: UserDatabase):
     except Exception as e:
         traceback.print_exc()
         log.error(f"自动上传分数失败: {e}")
-
-
-async def update_user_status(user: tuple, db: UserDatabase):
-    """更新用户状态"""
-    qq = user[0]
-    login = user[2]
-    logouttime = user[3]
-    qrcode_credentials = await db.get_user_credential(qq)
-    log_status = await is_login(qrcode_credentials)
-    if log_status:  # 用户正在上机
-        if login == 0:  # 之前登录状态为离线
-            await db.update_status(qq=qq, login=1, logouttime=0)
-    else:  # 用户不在上机
-        if login == 1:  # 之前登录状态为在线
-            await db.update_status(qq=qq, login=0, logouttime=1)
-        else:  # 之前登录状态为离线
-            if logouttime > 0 and logouttime < 3:  # 上机后离线，但是离线时间较短
-                await db.update_status(qq=qq, login=0, logouttime=logouttime+1)
-            elif logouttime >= 3:  # 上机后离线，且离线时间较长
-                await db.update_status(qq=qq, login=0, logouttime=0)
-
-
-async def auto_update(db: UserDatabase):
-    log.info("开始执行自动上传分数任务")
-
-    # 更新用户登录状态
-    await db.connect()
-    users = await db.get_autoupdate_user(1)
-    tasks = []
-    if users:
-        for user in users:
-            task = asyncio.create_task(update_user_status(user, db))
-            tasks.append(task)
-        await asyncio.gather(*tasks)
-    await db.close()
-    log.info(f"已更新用户登录状态，共更新 {len(tasks)} 个用户")
-
-    # 为符合要求的用户执行自动上传分数操作
-    await db.connect()
-    users = await db.get_autoupdate_user(3)
-    tasks = []
-    if users:
-        for user in users:
-            task = asyncio.create_task(execute_update(user, db))
-            tasks.append(task)
-        await asyncio.gather(*tasks)
-    await db.close()
-    log.info(f"已自动上传分数，共上传了 {len(tasks)} 个用户的数据")
-
-
-def job_listener(Event):
-    scheduler = AsyncIOScheduler()
-    if Event.exception:
-        log.error(f"自动上传分数任务执行失败: {Event.exception}")
-        scheduler.reschedule_job(Event.job_id, trigger='cron', hour='0-1,10-23', minute='*')
-
-
-async def auto_update_loop():
-    """自动上传分数循环任务"""
-    # 将之前处于登录状态的用户先执行一次自动上传
-    db = UserDatabase()  # TODO: db实例是否需要分离
-    await db.connect()
-    prev_users = await db.get_autoupdate_user(2)
-    tasks = []
-    if prev_users:
-        for user in prev_users:
-            task = asyncio.create_task(execute_update(user, db))
-            tasks.append(task)
-        await asyncio.gather(*tasks)
-    await db.init_user_status()  # 初始化状态
-    await db.close()
-    log.info(f"已初始化所有用户状态")
-
-    scheduler = AsyncIOScheduler()
-    scheduler.add_job(auto_update, 'cron', (db,), hour='0-1,10-23', minute='*')  # 每日10点到次日2点执行自动上传
-    scheduler.add_listener(job_listener, EVENT_JOB_ERROR)
-    scheduler.start()
-
-
-@on_startup
-async def _():
-    """bot启动时开启自动上传循环任务"""
-    asyncio.create_task(auto_update_loop())
 
 
 async def update_score(qqid: str, username: str, password: str, qrcode_credentials:str, updatetype: int, db: UserDatabase, special_flag: bool = False, repeat_flag: bool = False, bot: NoneBot = None, ev: CQEvent = None) -> str:
@@ -344,24 +249,3 @@ async def _(bot: NoneBot, ev: CQEvent):
     finally:
         await bot.send(ev, msg, at_sender=False)
         await db.close()
-
-
-@autoupdate
-async def _(bot: NoneBot, ev: CQEvent):
-    args = ev.message.extract_plain_text().strip().lower()
-    if args == '开启':
-        db = UserDatabase()
-        await db.connect()
-        qqid = ev.user_id
-        await db.update_status(qq=qqid, autoupdate=1, login=0, logouttime=0)
-        msg = '已开启自动上传分数'
-    elif args == '关闭':
-        db = UserDatabase()
-        await db.connect()
-        qqid = ev.user_id
-        await db.update_status(qq=qqid, autoupdate=0, login=0, logouttime=0)
-        msg = '已关闭自动上传分数'
-    else:
-        msg = '请提供正确的指令格式'
-
-    await bot.send(ev, msg, at_sender=False)

@@ -1,2 +1,2 @@
 maimai-py
-aiosqlite
+databases
