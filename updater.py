@@ -12,6 +12,7 @@ from . import log, sv, SV_HELP
 
 maimai = MaimaiClient(timeout=60)
 diving_provider = DivingFishProvider()
+db = UserDatabase().get_instance()
 
 bindwx = sv.on_prefix(['bindwx', '绑定微信'])
 binddf = sv.on_prefix(['binddf', '绑定水鱼'])
@@ -147,7 +148,6 @@ async def _(bot: NoneBot, ev: CQEvent):
             msg = '上传分数失败，请反馈给开发者！'
         finally:
             await bot.send(ev, msg, at_sender=False)
-            await db.close()
 
 
 @bindwx
@@ -200,7 +200,6 @@ async def _(bot: NoneBot, ev: CQEvent):
         msg = '绑定微信失败，请反馈给开发者！'
     finally:
         await bot.send(ev, msg, at_sender=False)
-        await db.close()
 
 
 @binddf
@@ -244,4 +243,3 @@ async def _(bot: NoneBot, ev: CQEvent):
         msg = '绑定水鱼失败，请反馈给开发者！'
     finally:
         await bot.send(ev, msg, at_sender=False)
-        await db.close()
