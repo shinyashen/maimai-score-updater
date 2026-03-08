@@ -1,5 +1,5 @@
 import asyncio, traceback
-from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerIdentifier, AimeServerError, TitleServerNetworkError, TitleServerBlockedError, InvalidPlayerIdentifierError, PrivacyLimitationError
+from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerIdentifier, AimeServerError, TitleServerBlockedError, InvalidPlayerIdentifierError, PrivacyLimitationError
 from httpx import HTTPError
 from typing import List
 from datetime import datetime
