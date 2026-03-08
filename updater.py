@@ -1,6 +1,5 @@
-import asyncio, traceback
-from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerIdentifier, AimeServerError, InvalidPlayerIdentifierError, PrivacyLimitationError
-from httpx import HTTPError
+import asyncio, traceback, urllib3, re, requests
+from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError
 from typing import List
 from datetime import datetime
 
@@ -12,6 +11,8 @@ from . import log, sv, SV_HELP
 
 maimai = MaimaiClient(timeout=60)
 diving_provider = DivingFishProvider()
+VITE_SUPABASE_URL = "https://salt_api_main.realtvop.top"
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 bindwx = sv.on_prefix(['bindwx', '绑定微信'])
 binddf = sv.on_prefix(['binddf', '绑定水鱼'])
@@ -169,14 +170,34 @@ async def _(bot: NoneBot, ev: CQEvent):
                 args: List[str] = ev.message.extract_plain_text().strip().split()
                 msg = None
                 if len(args) == 1 and args[0] == '帮助':
-                    msg = '绑定微信/bindwx(不带斜杠) <SGWCMAID...>: 绑定微信公众号二维码，请对二维码进行识别后复制识别的内容，以SGWCMAID开头，仅能在私聊绑定'
+                    msg = '绑定微信/bindwx(不带斜杠) <SGWCMAID.../https...>: 绑定微信公众号二维码，请发送二维码进行识别后复制识别的内容(以SGWCMAID开头)，或者发送二维码页面的链接(以https开头)，仅能在私聊绑定'
                 elif ev['message_type'] == 'private':
-                    if len(args) == 1 and args[0].startswith('SGWCMAID'):
-                        identifier = await ArcadeProvider().get_identifier(args[0], maimai)
-                        await db.update_user(qq=qqid, sgwcmaid=identifier.credentials)
+                    if len(args) == 1 and args[0].startswith('SGWCMAID') and len(args[0]) == 84:
+                        qr_code = args[0][-64:]  # 取最后64个字符
+                    elif len(args) == 1 and args[0].startswith('https'):
+                        matches = re.findall(r'MAID.{0,76}', args[0])  # 匹配以MAID开头，后续0~76个字符
+                        if matches:
+                            qr_code = matches[0][-64:]  # 取第一个匹配结果的最后64位
+                        else:
+                            msg = '链接解析失败，请检查内容是否正确'
+                            break
+                    else:
+                        msg = '请提供正确格式的内容(SGWCMAID.../https...)！'
+                        break
+
+                    # from SaltNet
+                    url = f"{VITE_SUPABASE_URL}/getQRInfo"
+                    payload = {"qrCode": qr_code}
+
+                    response = requests.post(url, json=payload, verify=False)
+                    data = response.json()
+                    if data.get("errorID") == 0:
+                        user_id = data.get("userID")
+                        await db.update_user(qq=qqid, userid=user_id)
                         msg = '绑定微信二维码信息成功'
                     else:
-                        msg = '请提供正确格式的二维码文本内容，以SGWCMAID开头'
+                        msg = '二维码/链接解析失败，请检查内容是否正确/是否在有效期内'
+                        break
                 else:
                     msg = '只有私聊才能进行绑定操作哦'
                 break
@@ -191,10 +212,6 @@ async def _(bot: NoneBot, ev: CQEvent):
                 log.warning(f"第 {retry_count}/{max_retries} 次重试 (等待 {delay}s)")
                 await asyncio.sleep(delay)
 
-    except AimeServerError as e:
-        traceback.print_exc()
-        log.error(f"Aime服务器错误: {e}")
-        msg = '二维码内容无效或者已过期，请重试'
     except Exception as e:
         traceback.print_exc()
         log.error(f"发生意外错误: {e}")
