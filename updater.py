@@ -1,11 +1,11 @@
 import asyncio, traceback
-from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerIdentifier, AimeServerError, TitleServerBlockedError, InvalidPlayerIdentifierError, PrivacyLimitationError
+from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerIdentifier, AimeServerError, InvalidPlayerIdentifierError, PrivacyLimitationError
 from httpx import HTTPError
 from typing import List
 from datetime import datetime
 
 
-from nonebot import NoneBot
+from nonebot import NoneBot, on_startup
 from hoshino.typing import CQEvent
 from .database import UserDatabase
 from . import log, sv, SV_HELP
@@ -133,10 +133,6 @@ async def _(bot: NoneBot, ev: CQEvent):
                     log.warning(f"第 {retry_count}/{max_retries} 次重试 (等待 {delay}s)")
                     await asyncio.sleep(delay)
 
-        except TitleServerBlockedError as e:
-            traceback.print_exc()
-            log.error(f"Title服务器错误: {e}")
-            msg = '主机被华立屏蔽了喵，请反馈给开发者！'
         except InvalidPlayerIdentifierError as e:
             traceback.print_exc()
             log.error(f"水鱼账户无效: {e}")
