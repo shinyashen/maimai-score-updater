@@ -221,10 +221,6 @@ async def _(bot: NoneBot, ev: CQEvent):
                 msg = '请提供正确格式的水鱼账号信息'
         else:
             msg = '只有私聊才能进行绑定操作哦'
-    except HTTPError as e:
-        traceback.print_exc()
-        log.error(f"水鱼服务器错误: {e}")
-        msg = '连接到服务器时出现了一些问题，请稍后再试'
     except InvalidPlayerIdentifierError as e:
         traceback.print_exc()
         log.error(f"水鱼账户无效: {e}")
