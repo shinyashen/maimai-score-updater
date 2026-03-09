@@ -41,7 +41,7 @@ class MyProvider(IScoreProvider):
         return Score(
             id=song_id if song_id > 100000 else song_id % 10000,
             level='unknown',
-            level_index=LevelIndex(int(score['level'])) if int(score['level']) < 5 else 0,  # utage
+            level_index=LevelIndex(int(score['level'])) if int(score['level']) < 5 else LevelIndex(0),  # utage
             achievements=achievement,
             fc=FCType(4-int(score['comboStatus'])) if int(score['comboStatus']) else None,
             fs=FSType(int(score['syncStatus']) % 5) if int(score['syncStatus']) else None,
