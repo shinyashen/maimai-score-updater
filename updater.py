@@ -35,7 +35,7 @@ class MyProvider(IScoreProvider):
 
     @staticmethod
     def _deser_score(score: dict) -> Score:
-        achievement = float(score['achievement']/10000),
+        achievement = float(int(score['achievement'])/10000),
         return Score(
             id=int(score['musicId']),
             level='unknown',
@@ -95,11 +95,6 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
     update_tasks = []
     diving_player = PlayerIdentifier(username=username, credentials=password)
     arcade_player = MyProvider._ser_identifier(userid=userid, qrcode=qrcode)
-
-    # arcade test
-    scores = await arcade_provider.get_scores_all(arcade_player, maimai)
-    await bot.send(ev, f'arcade: {len(scores)}', at_sender=False)
-
     task = asyncio.create_task(maimai.updates_chain(
         source=[
             (arcade_provider, arcade_player, {}),
