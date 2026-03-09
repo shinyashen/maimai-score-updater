@@ -10,6 +10,7 @@ from .database import UserDatabase
 from . import log, sv, SV_HELP
 
 
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 VITE_SUPABASE_URL = "https://salt_api_main.realtvop.top"
 
 
@@ -35,14 +36,15 @@ class MyProvider(IScoreProvider):
 
     @staticmethod
     def _deser_score(score: dict) -> Score:
+        song_id = int(score['musicId'])
         achievement = float(int(score['achievement'])/10000)
         return Score(
-            id=int(score['musicId']),
+            id=song_id if song_id > 100000 else song_id % 10000,
             level='unknown',
-            level_index=LevelIndex(int(score['level'])),
+            level_index=LevelIndex(int(score['level'])) if int(score['level']) < 5 else None,  # utage
             achievements=achievement,
             fc=FCType(4-int(score['comboStatus'])) if int(score['comboStatus']) else None,
-            fs=FSType(int(score['syncStatus'])%5) if int(score['syncStatus']) else None,
+            fs=FSType(int(score['syncStatus']) % 5) if int(score['syncStatus']) else None,
             dx_score=int(score['deluxscoreMax']),
             dx_rating=None,
             play_count=None,
@@ -52,11 +54,6 @@ class MyProvider(IScoreProvider):
         )
 
 
-maimai = MaimaiClient(timeout=60)
-diving_provider = DivingFishProvider()
-arcade_provider = MyProvider()
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-
 bindwx = sv.on_prefix(['bindwx', '绑定微信'])
 binddf = sv.on_prefix(['binddf', '绑定水鱼'])
 update = sv.on_prefix(['wmupdate', '上传分数', '导'])
@@ -65,13 +62,6 @@ autoupdate = sv.on_suffix(['autoupdate', '自动上传'])
 
 async def get_db() -> UserDatabase:
     return await UserDatabase.get_instance()
-
-
-async def check_df_valid(username: str, password: str):
-    """检查水鱼账号是否有效"""
-    login_json = {"username": username, "password": password}
-    resp = await maimai._client.post("https://www.diving-fish.com/api/maimaidxprober/login", json=login_json)
-    DivingFishProvider()._check_response_player(resp)
 
 
 async def update_score(user, qrcode: str = None, special_flag: bool = False, repeat_flag: bool = False, bot: NoneBot = None, ev: CQEvent = None) -> tuple[str, str]:
@@ -88,10 +78,13 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
         else:
             log.info(f"更新到目标{context.get('name')}成功，共 {len(scores.scores)} 条成绩")
 
-    username = user[1]
-    password = user[2]
-    userid = user[3]
-    lastupdate = user[4]
+    maimai = MaimaiClient(timeout=60)
+    diving_provider = DivingFishProvider()
+    arcade_provider = MyProvider()
+
+    imtoken = user[1]
+    userid = user[2]
+    lastupdate = user[3]
     if not repeat_flag:
         if not lastupdate or lastupdate.lower() == 'none' or lastupdate.lower() == 'null' or lastupdate == '' or lastupdate.lower() == 0:
             if special_flag:
@@ -105,7 +98,7 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
                 await bot.send(ev, f'正在上传分数，请稍等...\n上次上传时间: {lastupdate}', at_sender=False)
 
     update_tasks = []
-    diving_player = PlayerIdentifier(username=str(username), credentials=str(password))
+    diving_player = PlayerIdentifier(credentials=imtoken)
     arcade_player = MyProvider._ser_identifier(userid=userid, qrcode=qrcode)
     task = asyncio.create_task(maimai.updates_chain(
         source=[
@@ -186,9 +179,9 @@ async def _(bot: NoneBot, ev: CQEvent):
                     msg = '几把怎么连导都不会。。。想知道怎么导？对我说“导帮助”喵'
                 return
             if not username or not password:
-                msg = '请绑定水鱼账号信息'
+                msg = '请绑定水鱼成绩导入token信息'
                 if special_flag:
-                    msg = '没绑水鱼账号你怎么导。。。'
+                    msg = '没绑水鱼token你怎么导。。。'
                 return
             if not userid:
                 msg = '请绑定微信二维码信息'
@@ -220,20 +213,16 @@ async def _(bot: NoneBot, ev: CQEvent):
 
         except InvalidPlayerIdentifierError as e:
             traceback.print_exc()
-            log.error(f"水鱼账户无效: {e}")
-            msg = '水鱼账户无效，可能是账户或者密码输错了，请重新绑定水鱼账号密码'
+            log.error(f"水鱼成绩导入token无效: {e}")
+            msg = '水鱼成绩导入token无效，请检查成绩导入token的有效性'
         except PrivacyLimitationError as e:
             traceback.print_exc()
             log.error(f"隐私限制错误: {e}")
             msg = '你没有同意水鱼的用户协议，无法完成该操作'
         except Exception as e:
             traceback.print_exc()
-            if '400' in str(e) or '401' in str(e):
-                log.error(f"水鱼账户无效: {e}")
-                msg = '水鱼账户无效，可能是账户或者密码输错了，请重新绑定水鱼账号密码'
-            else:
-                log.error(f"发生意外错误: {e}")
-                msg = '上传分数失败，请反馈给开发者！'
+            log.error(f"发生意外错误: {e}")
+            msg = '上传分数失败，请反馈给开发者！'
         finally:
             await bot.send(ev, msg, at_sender=False)
 
@@ -308,34 +297,26 @@ async def _(bot: NoneBot, ev: CQEvent):
         args: List[str] = ev.message.extract_plain_text().strip().split()
         msg = None
         if len(args) == 1 and args[0] == '帮助':
-            msg = '绑定水鱼/binddf(不带斜杠) <水鱼账号> <水鱼密码>: 绑定水鱼账号信息，仅能在私聊绑定'
+            msg = '绑定水鱼/binddf(不带斜杠) <水鱼成绩导入token>: 绑定水鱼成绩导入token，仅能在私聊绑定'
         elif ev['message_type'] == 'private':
-            if len(args) == 2:
-                username = args[0]
-                password = args[1]
-                await check_df_valid(username, password)
-
-                await db.update_user(qq=qqid, username=username, password=password)
-                msg = '绑定水鱼账号信息成功'
+            if len(args) == 1 and re.match(r'^[a-f0-9]{128}$', args[0]):
+                await db.update_user(qq=qqid, imtoken=args[0])
+                msg = '绑定水鱼成绩导入token成功'
             else:
-                msg = '请提供正确格式的水鱼账号信息'
+                msg = '请提供正确格式的水鱼成绩导入token'
         else:
             msg = '只有私聊才能进行绑定操作哦'
     except InvalidPlayerIdentifierError as e:
         traceback.print_exc()
-        log.error(f"水鱼账户无效: {e}")
-        msg = '水鱼账户无效，可能是账户或者密码输错了，请重新输入'
+        log.error(f"水鱼成绩导入token无效: {e}")
+        msg = '水鱼成绩导入token无效，请检查成绩导入token的有效性'
     except PrivacyLimitationError as e:
         traceback.print_exc()
         log.error(f"隐私限制错误: {e}")
         msg = '你没有同意水鱼的用户协议，无法完成该操作'
     except Exception as e:
         traceback.print_exc()
-        if '400' in str(e) or '401' in str(e):
-            log.error(f"水鱼账户无效: {e}")
-            msg = '水鱼账户无效，可能是账户或者密码输错了，请重新绑定水鱼账号密码'
-        else:
-            log.error(f"发生意外错误: {e}")
-            msg = '上传分数失败，请反馈给开发者！'
+        log.error(f"发生意外错误: {e}")
+        msg = '绑定水鱼token失败，请反馈给开发者！'
     finally:
         await bot.send(ev, msg, at_sender=False)

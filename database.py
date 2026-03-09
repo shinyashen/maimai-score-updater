@@ -28,8 +28,7 @@ class UserDatabase:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     qq TEXT PRIMARY KEY,          -- QQ号作为主键
-                    username TEXT,                -- 用户名
-                    password TEXT,                -- 加密后的密码
+                    imtoken TEXT,                 -- 水鱼成绩导入token
                     userid TEXT,                  -- userid(from SGWCMAID)
                     lastupdate TEXT               -- 最后成功更新时间
                 );"""
@@ -38,19 +37,18 @@ class UserDatabase:
         cls._instance = cls(db)
         return cls._instance
 
-    async def update_user(self, qq: str, username: str = None, password: str = None, userid: str = None, lastupdate: str = None):
+    async def update_user(self, qq: str, imtoken: str = None, userid: str = None, lastupdate: str = None):
         """更新用户信息"""
         insert_sql = """
-        INSERT OR REPLACE INTO users (qq, username, password, userid, lastupdate)
-        VALUES (:qq, :username, :password, :userid, :lastupdate)
+        INSERT OR REPLACE INTO users (qq, imtoken, userid, lastupdate)
+        VALUES (:qq, :imtoken, :userid, :lastupdate)
         ON CONFLICT(qq) DO UPDATE SET
-            username = COALESCE(excluded.username, users.username),
-            password = COALESCE(excluded.password, users.password),
+            imtoken = COALESCE(excluded.imtoken, users.imtoken),
             userid = COALESCE(excluded.userid, users.userid),
             lastupdate = COALESCE(excluded.lastupdate, users.lastupdate)
         """
         async with self._db as db:
-            await db.execute(insert_sql, {"qq": qq, "username": username, "password": password, "userid": userid, "lastupdate": lastupdate})
+            await db.execute(insert_sql, {"qq": qq, "imtoken": imtoken, "userid": userid, "lastupdate": lastupdate})
 
     async def get_user(self, qq: str) -> tuple:
         """根据QQ号获取用户信息"""
