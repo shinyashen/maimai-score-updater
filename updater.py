@@ -77,7 +77,7 @@ async def send_forward_msg(bot: NoneBot, ev: CQEvent, msg_list: list[str], name:
     if ev['message_type'] != 'private':
         await bot.send_group_forward_msg(group_id=ev.group_id, messages=msgs)
     else:
-        await bot.send_private_forward_msg(user_id=user_id or str(ev.self_id), messages=msgs)
+        await bot.send_private_forward_msg(user_id=ev.user_id, messages=msgs)
 
 
 async def update_score(user, qrcode: str = None, special_flag: bool = False, repeat_flag: bool = False, bot: NoneBot = None, ev: CQEvent = None) -> tuple[str, str]:
