@@ -40,8 +40,8 @@ class MyProvider(IScoreProvider):
         achievement = float(int(score['achievement'])/10000)
         return Score(
             id=song_id if song_id > 100000 else song_id % 10000,
-            level='unknown',
-            level_index=LevelIndex(int(score['level'])) if int(score['level']) < 5 else LevelIndex(0),  # utage
+            level=None,
+            level_index=LevelIndex(int(score['level'])) if int(score['level']) < 5 else LevelIndex(0),  # utage=10
             achievements=achievement,
             fc=FCType(4-int(score['comboStatus'])) if int(score['comboStatus']) else None,
             fs=FSType(int(score['syncStatus']) % 5) if int(score['syncStatus']) else None,
@@ -50,7 +50,7 @@ class MyProvider(IScoreProvider):
             play_count=None,
             play_time=None,
             rate=RateType._from_achievement(achievement),
-            type=SongType._from_id(int(score['musicId']))
+            type=SongType._from_id(song_id)
         )
 
 
@@ -64,23 +64,30 @@ async def get_db() -> UserDatabase:
     return await UserDatabase.get_instance()
 
 
+async def group_msg(ev: CQEvent, msg_list: list[str], name: str = None, user_id: str = None):
+    return [{
+        "type": "node",
+        "data": {
+            "name": name or "bot",
+            "uin": user_id or str(ev.self_id),
+            "content": msg
+        }
+    } for msg in msg_list]
+
+
 async def update_score(user, qrcode: str = None, special_flag: bool = False, repeat_flag: bool = False, bot: NoneBot = None, ev: CQEvent = None) -> tuple[str, str]:
     """上传分数主函数"""
     def source_callback(scores: MaimaiScores, err: Optional[BaseException], context: dict) -> None:
         if err:
-            log.error(f"从{context.get('name')}源获取数据失败: {''.join(traceback.format_exception(type(err), err, err.__traceback__))}")
+            log.error(f"从{context.get('name')}源获取数据失败:\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}")
         else:
-            log.info(f"从{context.get('name')}源获取数据成功，共 {len(scores.scores)} 条成绩，Rating: {scores.rating}")
+            log.info(f"从{context.get('name')}源获取数据成功，共 {len(scores.scores)} 条成绩")
 
     def target_callback(scores: MaimaiScores, err: Optional[BaseException], context: dict) -> None:
         if err:
-            log.error(f"更新到目标{context.get('name')}失败: {''.join(traceback.format_exception(type(err), err, err.__traceback__))}")
+            log.error(f"更新到目标{context.get('name')}失败:\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}")
         else:
             log.info(f"更新到目标{context.get('name')}成功，共 {len(scores.scores)} 条成绩")
-
-    maimai = MaimaiClient(timeout=60)
-    diving_provider = DivingFishProvider()
-    arcade_provider = MyProvider()
 
     imtoken = user[1]
     userid = user[2]
@@ -88,31 +95,28 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
     if not repeat_flag:
         if not lastupdate or lastupdate.lower() == 'none' or lastupdate.lower() == 'null' or lastupdate == '' or lastupdate.lower() == 0:
             if special_flag:
-                await bot.send(ev, '正在帮你导，你先别急', at_sender=False)
+                await bot.send(ev, '推分了？你先别急', at_sender=False)
             else:
                 await bot.send(ev, '正在上传分数，请稍等...', at_sender=False)
         else:
             if special_flag:
-                await bot.send(ev, f'正在帮你导，你先别急\n你上次啥时候导的：{lastupdate}', at_sender=False)
+                await bot.send(ev, f'推分了？你先别急\n你上次啥时候导的: {lastupdate}', at_sender=False)
             else:
-                await bot.send(ev, f'正在上传分数，请稍等...\n上次上传时间: {lastupdate}', at_sender=False)
+                await bot.send(ev, f'正在上传分数，请稍等...\n最近上传时间: {lastupdate}', at_sender=False)
 
-    update_tasks = []
+    maimai = MaimaiClient(timeout=60)
+    diving_provider = DivingFishProvider()
+    arcade_provider = MyProvider()
     diving_player = PlayerIdentifier(credentials=imtoken)
     arcade_player = MyProvider._ser_identifier(userid=userid, qrcode=qrcode)
-    task = asyncio.create_task(maimai.updates_chain(
-        source=[
-            (arcade_provider, arcade_player, {"name": "arcade"}),
-            (diving_provider, diving_player, {"name": "df"}),
-        ],
-        target=[(diving_provider, diving_player, {"name": "df"})],
-        source_mode="parallel",
-        target_mode="parallel",
-        source_callback=source_callback,
-        target_callback=target_callback
-    ))
-    update_tasks.append(task)
+    source_providers = [(arcade_provider, arcade_player, {"name": "arcade"})]
+    target_providers = [(diving_provider, diving_player, {"name": "divingfish"})]
+    if not qrcode:  # 简略上传需要对成绩进行补充
+        source_providers.append((diving_provider, diving_player, {"name": "divingfish"}))
+    task = asyncio.create_task(maimai.updates_chain(source_providers, target_providers, "parallel", "parallel", source_callback, target_callback))
 
+    update_tasks = []
+    update_tasks.append(task)
     await asyncio.gather(*update_tasks)
     timenow = datetime.now().strftime(r"%Y-%m-%d %H:%M:%S")
     log.info("分数上传成功")
@@ -120,14 +124,24 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
     if special_flag:
         return f'水鱼接受了你的导！\n你这次导的时间为: {timenow}\n怎么导的：{"简单的导" if not qrcode else "好好的导"}', timenow
     else:
-        return f'上传分数至水鱼成功！\n上传时间: {timenow}\n上传方式：{"简略上传" if not qrcode else "全量上传"}', timenow
+        return f'上传分数至水鱼成功！\n本次上传时间: {timenow}\n上传方式：{"简略上传" if not qrcode else "全量上传"}', timenow
 
 
 @update
 async def _(bot: NoneBot, ev: CQEvent):
     args: List[str] = ev.message.extract_plain_text().strip().split()
     if len(args) == 1 and args[0] == '帮助':
-        await bot.send(ev, SV_HELP, at_sender=False)
+        help_msg = [
+            "上传国服maimaiDX成绩至水鱼数据库，指令*不带斜杠*，仅能在*私聊*进行相关绑定操作。",
+            "参数说明：尖叫括号<>包裹的是必填参数，方括号[]包裹的是可选参数。请不要连带括号一起输入！",
+            "指令列表：",
+            "1. 绑定微信/bindwx <SGWCMAID.../https...>: 绑定微信公众号二维码，可输入二维码进行识别后的内容(SGWCMAID开头)，或者二维码页面的网页链接(https开头)",
+            "2. 绑定水鱼/binddf <水鱼成绩导入token>: 绑定水鱼成绩导入token",
+            "3. 上传分数/导/wmupdate [SGWCMAID.../https...]: 上传分数数据至水鱼数据库，全量上传时仅支持私聊",
+            "上传说明：若上传指令不带有二维码信息，则默认进行简略上传，*仅上传*达成率与dx分数；若上传指令带有二维码信息，则进行全量上传。"
+        ]
+        help = await group_msg(ev, help_msg, "传分帮助")
+        await bot.send_group_forward_msg(ev['group_id'], help)
     else:
         qr_code = None
         user_id_from_qr = None
