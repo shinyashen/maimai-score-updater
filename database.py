@@ -30,8 +30,8 @@ class UserDatabase:
                     qq TEXT PRIMARY KEY,          -- QQ号作为主键
                     username TEXT,                -- 用户名
                     password TEXT,                -- 加密后的密码
-                    userid TEXT                   -- userid(from SGWCMAID)
-                    lastupdate TEXT,              -- 最后成功更新时间
+                    userid TEXT,                  -- userid(from SGWCMAID)
+                    lastupdate TEXT               -- 最后成功更新时间
                 );"""
             )
 
