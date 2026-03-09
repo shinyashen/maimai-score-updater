@@ -41,7 +41,7 @@ class MyProvider(IScoreProvider):
         return Score(
             id=song_id if song_id > 100000 else song_id % 10000,
             level='unknown',
-            level_index=LevelIndex(int(score['level'])) if int(score['level']) < 5 else None,  # utage
+            level_index=LevelIndex(int(score['level'])) if int(score['level']) < 5 else 0,  # utage
             achievements=achievement,
             fc=FCType(4-int(score['comboStatus'])) if int(score['comboStatus']) else None,
             fs=FSType(int(score['syncStatus']) % 5) if int(score['syncStatus']) else None,
@@ -68,13 +68,13 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
     """上传分数主函数"""
     def source_callback(scores: MaimaiScores, err: Optional[BaseException], context: dict) -> None:
         if err:
-            log.error(f"从{context.get('name')}源获取数据失败: {err}")
+            log.error(f"从{context.get('name')}源获取数据失败: {''.join(traceback.format_exception(type(err), err, err.__traceback__))}")
         else:
             log.info(f"从{context.get('name')}源获取数据成功，共 {len(scores.scores)} 条成绩，Rating: {scores.rating}")
 
     def target_callback(scores: MaimaiScores, err: Optional[BaseException], context: dict) -> None:
         if err:
-            log.error(f"更新到目标{context.get('name')}失败: {err}")
+            log.error(f"更新到目标{context.get('name')}失败: {''.join(traceback.format_exception(type(err), err, err.__traceback__))}")
         else:
             log.info(f"更新到目标{context.get('name')}成功，共 {len(scores.scores)} 条成绩")
 
