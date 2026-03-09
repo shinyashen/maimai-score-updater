@@ -170,15 +170,14 @@ async def _(bot: NoneBot, ev: CQEvent):
             db = await get_db()
             user = await db.get_user(qqid)
             if user:
-                username = user[1]
-                password = user[2]
-                userid = user[3]
+                imtoken = user[1]
+                userid = user[2]
             else:
                 msg = '未绑定任何账号，请先绑定微信二维码信息与水鱼账号，查看帮助请输入“上传分数帮助”'
                 if special_flag:
                     msg = '几把怎么连导都不会。。。想知道怎么导？对我说“导帮助”喵'
                 return
-            if not username or not password:
+            if not imtoken:
                 msg = '请绑定水鱼成绩导入token信息'
                 if special_flag:
                     msg = '没绑水鱼token你怎么导。。。'
