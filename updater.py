@@ -1,5 +1,5 @@
 import asyncio, traceback, urllib3, re, requests
-from maimai_py import DivingFishProvider, ArcadeProvider, MaimaiClient, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError
+from maimai_py import DivingFishProvider, IScoreProvider, MaimaiClient, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
 from typing import List
 from datetime import datetime
 
@@ -9,9 +9,52 @@ from hoshino.typing import CQEvent
 from .database import UserDatabase
 from . import log, sv, SV_HELP
 
+
+VITE_SUPABASE_URL = "https://salt_api_main.realtvop.top"
+
+
+class MyProvider(IScoreProvider):
+    async def get_scores_all(self, identifier: PlayerIdentifier, client: MaimaiClient) -> list[Score]:
+        url = f"{VITE_SUPABASE_URL}/updateUser"
+        response = requests.post(url, json=self._deser_identifier(identifier), verify=False)
+        response.raise_for_status()
+        raw_result = response.json()
+        return [self._deser_score(music) for entry in raw_result['userMusicList'] for music in entry.get('userMusicDetailList')]
+
+    @staticmethod
+    def _ser_identifier(userid: str | None = None, qrcode: str | None = None) -> PlayerIdentifier:
+        return PlayerIdentifier(credentials={"userid": userid or "", "qrcode": qrcode or ""})
+
+    @staticmethod
+    def _deser_identifier(identifier: PlayerIdentifier) -> dict[str, str]:
+        assert isinstance(identifier.credentials, dict), "Identifier credentials should be a dictionary."
+        userid = identifier.credentials.get("userid")
+        if qrcode := identifier.credentials.get("qrcode"):
+            return {"userId": userid, "importToken": "", "qrCode": qrcode}
+        return {"userId": userid, "importToken": ""}
+
+    @staticmethod
+    def _deser_score(score: dict) -> Score:
+        achievement = float(score['achievement']/10000),
+        return Score(
+            id=int(score['musicId']),
+            level='unknown',
+            level_index=LevelIndex(int(score['level'])),
+            achievements=achievement,
+            fc=FCType(4-int(score['comboStatus'])) if int(score['comboStatus']) else None,
+            fs=FSType(int(score['syncStatus'])%5) if int(score['syncStatus']) else None,
+            dx_score=int(score['deluxscoreMax']),
+            dx_rating=None,
+            play_count=None,
+            play_time=None,
+            rate=RateType._from_achievement(achievement),
+            type=SongType._from_id(int(score['musicId']))
+        )
+
+
 maimai = MaimaiClient(timeout=60)
 diving_provider = DivingFishProvider()
-VITE_SUPABASE_URL = "https://salt_api_main.realtvop.top"
+arcade_provider = MyProvider()
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 bindwx = sv.on_prefix(['bindwx', '绑定微信'])
@@ -31,62 +74,46 @@ async def check_df_valid(username: str, password: str):
     DivingFishProvider()._check_response_player(resp)
 
 
-async def execute_update(user: tuple, db: UserDatabase):
-    """执行分数上传"""
-    qqid = user[0]
+async def update_score(user, qrcode: str = None, special_flag: bool = False, repeat_flag: bool = False, bot: NoneBot = None, ev: CQEvent = None) -> tuple[str, str]:
+    """上传分数主函数"""
     username = user[1]
     password = user[2]
-    qrcode_credentials = user[3]
-    if not username or not password or not qrcode_credentials:
-        log.error(f"用户 {qqid} 的信息不完整")
-    try:
-        await update_score(qqid, username, password, qrcode_credentials, 1, db)
-    except Exception as e:
-        traceback.print_exc()
-        log.error(f"自动上传分数失败: {e}")
-
-
-async def update_score(qqid: str, username: str, password: str, qrcode_credentials:str, updatetype: int, db: UserDatabase, special_flag: bool = False, repeat_flag: bool = False, bot: NoneBot = None, ev: CQEvent = None) -> str:
-    """上传分数主函数"""
-    status = await db.get_status(qqid)
-    if not status:
-        await db.update_status(qq=qqid, autoupdate=0, login=0, logouttime=0)
-        if updatetype == 0 and not repeat_flag:
+    userid = user[3]
+    lastupdate = user[4]
+    if not repeat_flag:
+        if not lastupdate or lastupdate.lower() == 'none' or lastupdate.lower() == 'null' or lastupdate == '' or lastupdate.lower() == 0:
             if special_flag:
                 await bot.send(ev, '正在帮你导，你先别急', at_sender=False)
             else:
                 await bot.send(ev, '正在上传分数，请稍等...', at_sender=False)
-    elif status[4] is None or status[5] is None:
-        if updatetype == 0 and not repeat_flag:
+        else:
             if special_flag:
-                await bot.send(ev, '正在帮你导，你先别急', at_sender=False)
+                await bot.send(ev, f'正在帮你导，你先别急\n你上次啥时候导的：{lastupdate}', at_sender=False)
             else:
-                await bot.send(ev, '正在上传分数，请稍等...', at_sender=False)
-    else:
-        lastupdate = status[4]
-        type = status[5]
-        if updatetype == 0 and not repeat_flag:
-            if special_flag:
-                await bot.send(ev, f'正在帮你导，你先别急\n你上次啥时候导的：{lastupdate}\n怎么导的：{"自动档" if type == 1 else "手动档"}', at_sender=False)
-            else:
-                await bot.send(ev, f'正在上传分数，请稍等...\n上次上传时间: {lastupdate}\n上传方式: {"自动" if type == 1 else "手动"}', at_sender=False)
+                await bot.send(ev, f'正在上传分数，请稍等...\n上次上传时间: {lastupdate}', at_sender=False)
 
     update_tasks = []
-    identifier = PlayerIdentifier(credentials=qrcode_credentials)
-    scores = await maimai.scores(identifier, ArcadeProvider())
     diving_player = PlayerIdentifier(username=username, credentials=password)
-    task = asyncio.create_task(maimai.updates(diving_player, scores.scores, diving_provider))
+    arcade_player = MyProvider._ser_identifier(userid=userid, qrcode=qrcode)
+    task = asyncio.create_task(maimai.updates_chain(
+        source=[
+            (arcade_provider, arcade_player, {}),
+            (diving_provider, diving_player, {}),
+        ],
+        target=[(diving_provider, diving_player, {})],
+        source_mode="parallel",
+        target_mode="parallel"
+    ))
     update_tasks.append(task)
 
     await asyncio.gather(*update_tasks)
-    log.info("分数上传成功")
     timenow = datetime.now().strftime(r"%Y-%m-%d %H:%M:%S")
-    await db.update_status(qq=qqid, lastupdate=timenow, updatetype=updatetype)
+    log.info("分数上传成功")
 
     if special_flag:
-        return f'水鱼接受了你的导！\n你这次导的时间为: {timenow}'
+        return f'水鱼接受了你的导！\n你这次导的时间为: {timenow}\n怎么导的：{"简单的导" if not qrcode else "好好的导"}', timenow
     else:
-        return f'上传分数至水鱼成功！\n上传时间: {timenow}'
+        return f'上传分数至水鱼成功！\n上传时间: {timenow}\n上传方式：{"简略上传" if not qrcode else "全量上传"}', timenow
 
 
 @update
@@ -94,9 +121,43 @@ async def _(bot: NoneBot, ev: CQEvent):
     args: List[str] = ev.message.extract_plain_text().strip().split()
     if len(args) == 1 and args[0] == '帮助':
         await bot.send(ev, SV_HELP, at_sender=False)
-    elif len(args) == 0:
+    else:
+        qr_code = None
+        user_id_from_qr = None
+        if ev['message_type'] == 'private' and len(args) > 0:
+            if len(args) == 1 and args[0].startswith('SGWCMAID') and len(args[0]) == 84:
+                qr_code = args[0][-64:]  # 取最后64个字符
+            elif len(args) == 1 and args[0].startswith('https'):
+                matches = re.findall(r'MAID.{0,76}', args[0])  # 匹配以MAID开头，后续0~76个字符
+                if matches:
+                    qr_code = matches[0][-64:]  # 取第一个匹配结果的最后64位
+                else:
+                    msg = '链接解析失败，请检查内容是否正确'
+                    await bot.send(ev, msg, at_sender=False)
+                    return
+            else:
+                msg = '请提供正确格式的内容(SGWCMAID.../https...)！'
+                await bot.send(ev, msg, at_sender=False)
+                return
+
+            # from SaltNet
+            url = f"{VITE_SUPABASE_URL}/getQRInfo"
+            response = requests.post(url, json={"qrCode": qr_code}, verify=False)
+            data = response.json()
+            if data.get("errorID") == 0:
+                user_id_from_qr = data.get("userID")
+            else:
+                msg = '二维码/链接解析失败，请检查内容是否正确/是否在有效期内'
+                await bot.send(ev, msg, at_sender=False)
+                return
+
+        elif ev['message_type'] != 'private' and len(args) > 0:
+            msg = '只有私聊才能进行绑定操作哦(若要简略上传，请不要输入指令以外的额外字符)'
+            await bot.send(ev, msg, at_sender=False)
+            return
+
         msg = None
-        special_flag = (ev.raw_message == '导')
+        special_flag = (ev.raw_message[0] == '导')
         try:
             qqid = ev.user_id
             db = await get_db()
@@ -104,7 +165,7 @@ async def _(bot: NoneBot, ev: CQEvent):
             if user:
                 username = user[1]
                 password = user[2]
-                qrcode_credentials = user[3]
+                userid = user[3]
             else:
                 msg = '未绑定任何账号，请先绑定微信二维码信息与水鱼账号，查看帮助请输入“上传分数帮助”'
                 if special_flag:
@@ -115,17 +176,23 @@ async def _(bot: NoneBot, ev: CQEvent):
                 if special_flag:
                     msg = '没绑水鱼账号你怎么导。。。'
                 return
-            if not qrcode_credentials:
+            if not userid:
                 msg = '请绑定微信二维码信息'
                 if special_flag:
                     msg = '没绑微信二维码你怎么导。。。'
+                return
+            elif user_id_from_qr and str(userid) != str(user_id_from_qr):
+                msg = '你提供的二维码所对应账号与之前绑定的账号不匹配，请检查后重新输入'
+                if special_flag:
+                    msg = '怎么，还想帮别人导一导？'
                 return
 
             max_retries = 5
             retry_count = 0
             while retry_count <= max_retries:
                 try:
-                    msg = await update_score(qqid, username, password, qrcode_credentials, 0, db, special_flag, (retry_count > 0), bot, ev)
+                    msg, timenow = await update_score(user, qr_code, special_flag, (retry_count > 0), bot, ev)
+                    await db.update_user(qq=qqid, lastupdate=timenow)
                     break  # 成功则退出循环
                 except Exception as e:
                     retry_count += 1
@@ -187,9 +254,7 @@ async def _(bot: NoneBot, ev: CQEvent):
 
                     # from SaltNet
                     url = f"{VITE_SUPABASE_URL}/getQRInfo"
-                    payload = {"qrCode": qr_code}
-
-                    response = requests.post(url, json=payload, verify=False)
+                    response = requests.post(url, json={"qrCode": qr_code}, verify=False)
                     data = response.json()
                     if data.get("errorID") == 0:
                         user_id = data.get("userID")

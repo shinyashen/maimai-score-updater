@@ -31,24 +31,26 @@ class UserDatabase:
                     username TEXT,                -- 用户名
                     password TEXT,                -- 加密后的密码
                     userid TEXT                   -- userid(from SGWCMAID)
+                    lastupdate TEXT,              -- 最后成功更新时间
                 );"""
             )
 
         cls._instance = cls(db)
         return cls._instance
 
-    async def update_user(self, qq: str, username: str = None, password: str = None, userid: str = None):
+    async def update_user(self, qq: str, username: str = None, password: str = None, userid: str = None, lastupdate: str = None):
         """更新用户信息"""
         insert_sql = """
-        INSERT OR REPLACE INTO users (qq, username, password, userid)
-        VALUES (:qq, :username, :password, :userid)
+        INSERT OR REPLACE INTO users (qq, username, password, userid, lastupdate)
+        VALUES (:qq, :username, :password, :userid, :lastupdate)
         ON CONFLICT(qq) DO UPDATE SET
             username = COALESCE(excluded.username, users.username),
             password = COALESCE(excluded.password, users.password),
-            userid = COALESCE(excluded.userid, users.userid)
+            userid = COALESCE(excluded.userid, users.userid),
+            lastupdate = COALESCE(excluded.lastupdate, users.lastupdate)
         """
         async with self._db as db:
-            await db.execute(insert_sql, {"qq": qq, "username": username, "password": password, "userid": userid})
+            await db.execute(insert_sql, {"qq": qq, "username": username, "password": password, "userid": userid, "lastupdate": lastupdate})
 
     async def get_user(self, qq: str) -> tuple:
         """根据QQ号获取用户信息"""
