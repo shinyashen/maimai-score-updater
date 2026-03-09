@@ -1,6 +1,6 @@
 import asyncio, traceback, urllib3, re, requests
-from maimai_py import DivingFishProvider, IScoreProvider, MaimaiClient, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
-from typing import List
+from maimai_py import DivingFishProvider, IScoreProvider, MaimaiClient, MaimaiScores, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
+from typing import List, Optional
 from datetime import datetime
 
 
@@ -76,6 +76,18 @@ async def check_df_valid(username: str, password: str):
 
 async def update_score(user, qrcode: str = None, special_flag: bool = False, repeat_flag: bool = False, bot: NoneBot = None, ev: CQEvent = None) -> tuple[str, str]:
     """上传分数主函数"""
+    def source_callback(scores: MaimaiScores, err: Optional[BaseException], context: dict) -> None:
+        if err:
+            log.error(f"从{context.get('name')}源获取数据失败: {err}")
+        else:
+            log.info(f"从{context.get('name')}源获取数据成功，共 {len(scores.scores)} 条成绩，Rating: {scores.rating}")
+
+    def target_callback(scores: MaimaiScores, err: Optional[BaseException], context: dict) -> None:
+        if err:
+            log.error(f"更新到目标{context.get('name')}失败: {err}")
+        else:
+            log.info(f"更新到目标{context.get('name')}成功，共 {len(scores.scores)} 条成绩")
+
     username = user[1]
     password = user[2]
     userid = user[3]
@@ -97,12 +109,14 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
     arcade_player = MyProvider._ser_identifier(userid=userid, qrcode=qrcode)
     task = asyncio.create_task(maimai.updates_chain(
         source=[
-            (arcade_provider, arcade_player, {}),
-            (diving_provider, diving_player, {}),
+            (arcade_provider, arcade_player, {"name": "arcade"}),
+            (diving_provider, diving_player, {"name": "df"}),
         ],
-        target=[(diving_provider, diving_player, {})],
+        target=[(diving_provider, diving_player, {"name": "df"})],
         source_mode="parallel",
-        target_mode="parallel"
+        target_mode="parallel",
+        source_callback=source_callback,
+        target_callback=target_callback
     ))
     update_tasks.append(task)
 
