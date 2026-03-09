@@ -64,8 +64,8 @@ async def get_db() -> UserDatabase:
     return await UserDatabase.get_instance()
 
 
-async def group_msg(ev: CQEvent, msg_list: list[str], name: str = None, user_id: str = None):
-    return [{
+async def send_forward_msg(bot: NoneBot, ev: CQEvent, msg_list: list[str], name: str = None, user_id: str = None):
+    msgs = [{
         "type": "node",
         "data": {
             "name": name or "bot",
@@ -73,6 +73,11 @@ async def group_msg(ev: CQEvent, msg_list: list[str], name: str = None, user_id:
             "content": msg
         }
     } for msg in msg_list]
+    # onebot api
+    if ev['message_type'] != 'private':
+        await bot.send_group_forward_msg(group_id=ev.group_id, messages=msgs)
+    else:
+        await bot.send_private_forward_msg(user_id=user_id or str(ev.self_id), messages=msgs)
 
 
 async def update_score(user, qrcode: str = None, special_flag: bool = False, repeat_flag: bool = False, bot: NoneBot = None, ev: CQEvent = None) -> tuple[str, str]:
@@ -140,8 +145,7 @@ async def _(bot: NoneBot, ev: CQEvent):
             "3. 上传分数/导/wmupdate [SGWCMAID.../https...]: 上传分数数据至水鱼数据库，全量上传时仅支持私聊",
             "上传说明：若上传指令不带有二维码信息，则默认进行简略上传，*仅上传*达成率与dx分数；若上传指令带有二维码信息，则进行全量上传。"
         ]
-        help = await group_msg(ev, help_msg, "传分帮助")
-        await bot.send_group_forward_msg(ev['group_id'], help)
+        await send_forward_msg(bot, ev, help_msg, name="上传帮助")
     else:
         qr_code = None
         user_id_from_qr = None
