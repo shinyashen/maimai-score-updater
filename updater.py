@@ -12,14 +12,22 @@ from . import log, sv
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 VITE_SUPABASE_URL = "https://salt_api_main.realtvop.top"
+VITE_API_FALLBACK_URL = "https://salt_api_backup.realtvop.top"
 
 
 class MyProvider(IScoreProvider):
     async def get_scores_all(self, identifier: PlayerIdentifier, client: MaimaiClient) -> list[Score]:
         url = f"{VITE_SUPABASE_URL}/updateUser"
         response = requests.post(url, json=self._deser_identifier(identifier), verify=False)
-        response.raise_for_status()
-        raw_result = response.json()
+        if response.status_code == 200:
+            raw_result = response.json()
+        else:
+            url_fallback = f"{VITE_API_FALLBACK_URL}/updateUser"
+            response_fallback = requests.post(url_fallback, json=self._deser_identifier(identifier), verify=False)
+            if response_fallback.status_code == 200:
+                raw_result = response_fallback.json()
+            else:
+                raise Exception(f"主API和备用API均无法访问，状态码分别为 {response.status_code} 和 {response_fallback.status_code}")
         return [self._deser_score(music) for entry in raw_result['userMusicList'] for music in entry.get('userMusicDetailList')]
 
     @staticmethod
@@ -197,7 +205,15 @@ async def _(bot: NoneBot, ev: CQEvent):
             # from SaltNet
             url = f"{VITE_SUPABASE_URL}/getQRInfo"
             response = requests.post(url, json={"qrCode": qr_code}, verify=False)
-            data = response.json()
+            if response.status_code == 200:
+                data = response.json()
+            else:
+                url_fallback = f"{VITE_API_FALLBACK_URL}/getQRInfo"
+                response_fallback = requests.post(url_fallback, json={"qrCode": qr_code}, verify=False)
+                if response_fallback.status_code == 200:
+                    data = response_fallback.json()
+                else:
+                    raise Exception(f"主API和备用API均无法访问，状态码分别为 {response.status_code} 和 {response_fallback.status_code}")
             if data.get("errorID") == 0:
                 user_id_from_qr = data.get("userID")
             else:
@@ -304,7 +320,15 @@ async def _(bot: NoneBot, ev: CQEvent):
                     # from SaltNet
                     url = f"{VITE_SUPABASE_URL}/getQRInfo"
                     response = requests.post(url, json={"qrCode": qr_code}, verify=False)
-                    data = response.json()
+                    if response.status_code == 200:
+                        data = response.json()
+                    else:
+                        url_fallback = f"{VITE_API_FALLBACK_URL}/getQRInfo"
+                        response_fallback = requests.post(url_fallback, json={"qrCode": qr_code}, verify=False)
+                        if response_fallback.status_code == 200:
+                            data = response_fallback.json()
+                        else:
+                            raise Exception(f"主API和备用API均无法访问，状态码分别为 {response.status_code} 和 {response_fallback.status_code}")
                     if data.get("errorID") == 0:
                         user_id = data.get("userID")
                         await db.update_user(qq=qqid, userid=user_id)
