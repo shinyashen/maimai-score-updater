@@ -7,7 +7,7 @@ from datetime import datetime
 from nonebot import NoneBot
 from hoshino.typing import CQEvent
 from .database import UserDatabase
-from . import log, sv, SV_HELP
+from . import log, sv
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
