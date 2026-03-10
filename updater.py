@@ -1,4 +1,4 @@
-import asyncio, traceback, urllib3, re, requests
+import asyncio, traceback, urllib3, re, requests, pathlib
 from maimai_py import DivingFishProvider, IScoreProvider, MaimaiClient, MaimaiScores, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
 from typing import List, Optional
 from datetime import datetime
@@ -56,7 +56,7 @@ class MyProvider(IScoreProvider):
 
 bindwx = sv.on_prefix(['bindwx', '绑定微信'])
 binddf = sv.on_prefix(['binddf', '绑定水鱼'])
-update = sv.on_prefix(['wmupdate', '上传分数', '导'])
+update = sv.on_prefix(['wmupdate', '上传分数', '传分', '导'])
 autoupdate = sv.on_suffix(['autoupdate', '自动上传'])
 
 
@@ -64,15 +64,42 @@ async def get_db() -> UserDatabase:
     return await UserDatabase.get_instance()
 
 
-async def send_forward_msg(bot: NoneBot, ev: CQEvent, msg_list: list[str], name: str = None, user_id: str = None):
-    msgs = [{
-        "type": "node",
-        "data": {
-            "name": name or "bot",
-            "uin": user_id or str(ev.self_id),
-            "content": msg
-        }
-    } for msg in msg_list]
+async def send_forward_msg(bot: NoneBot, ev: CQEvent, msg_list: list[str] | dict[str, str], name: str = None, user_id: str = None):
+    if isinstance(msg_list, list):
+        msgs = [{
+            "type": "node",
+            "data": {
+                "name": name or "bot",
+                "uin": user_id or str(ev.self_id),
+                "content": msg
+            }
+        } for msg in msg_list]
+    elif isinstance(msg_list, dict):
+        msgs = []
+        for key, value in msg_list.items():
+            if value == 'text':
+                msgs.append({
+                    "type": "node",
+                    "data": {
+                        "name": name or "bot",
+                        "uin": user_id or str(ev.self_id),
+                        "content": key
+                    }
+                })
+            elif value == 'image':
+                msgs.append({
+                    "type": "node",
+                    "data": {
+                        "name": name or "bot",
+                        "uin": user_id or str(ev.self_id),
+                        "content": {
+                            "type": "image",
+                            "data": {
+                                "file": key
+                            }
+                        }
+                    }
+                })
     # onebot api
     if ev['message_type'] != 'private':
         await bot.send_group_forward_msg(group_id=ev.group_id, messages=msgs)
@@ -136,15 +163,17 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
 async def _(bot: NoneBot, ev: CQEvent):
     args: List[str] = ev.message.extract_plain_text().strip().split()
     if len(args) == 1 and args[0] == '帮助':
-        help_msg = [
-            "上传国服maimaiDX成绩至水鱼数据库，指令*不带斜杠*，仅能在*私聊*进行相关绑定操作。",
-            "参数说明：尖叫括号<>包裹的是必填参数，方括号[]包裹的是可选参数。请不要连带括号一起输入！",
-            "指令列表：",
-            "1. 绑定微信/bindwx <SGWCMAID.../https...>: 绑定微信公众号二维码，可输入二维码进行识别后的内容(SGWCMAID开头)，或者二维码页面的网页链接(https开头)",
-            "2. 绑定水鱼/binddf <水鱼成绩导入token>: 绑定水鱼成绩导入token",
-            "3. 上传分数/导/wmupdate [SGWCMAID.../https...]: 上传分数数据至水鱼数据库，全量上传时仅支持私聊",
-            "上传说明：若上传指令不带有二维码信息，则默认进行简略上传，*仅上传*达成率与dx分数；若上传指令带有二维码信息，则进行全量上传。"
-        ]
+        pic_uri = (pathlib.Path(__file__).parent.resolve() / 'import_token.jpg').as_uri()
+        help_msg = {
+            "上传国服maimaiDX成绩至水鱼数据库，指令*不带斜杠*，仅能在*私聊*进行相关绑定操作。": "text",
+            "参数说明：尖角括号<>包裹的是必填参数，方括号[]包裹的是可选参数。请不要连带括号一起输入！": "text",
+            "指令列表：": "text",
+            "1. 绑定微信/bindwx <SGWCMAID.../https...>: 绑定微信公众号二维码，可输入二维码进行识别后的内容(SGWCMAID开头)，或者二维码页面的网页链接(https开头)": "text",
+            "2. 绑定水鱼/binddf <水鱼成绩导入token>: 绑定水鱼成绩导入token": "text",
+            f"{pic_uri}": "image",
+            "3. 上传分数/导/wmupdate [SGWCMAID.../https...]: 上传分数数据至水鱼数据库，全量上传时仅支持私聊": "text",
+            "上传说明：若上传指令不带有二维码信息，则默认进行简略上传，*仅上传*达成率与dx分数；若上传指令带有二维码信息，则进行全量上传。": "text"
+        }
         await send_forward_msg(bot, ev, help_msg, name="上传帮助")
     else:
         qr_code = None
