@@ -11,13 +11,13 @@ from . import log, sv
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-VITE_SUPABASE_URL = "https://salt_api_main.realtvop.top"
+VITE_API_URL = "https://salt_api_main.realtvop.top"
 VITE_API_FALLBACK_URL = "https://salt_api_backup.realtvop.top"
 
 
 class MyProvider(IScoreProvider):
     async def get_scores_all(self, identifier: PlayerIdentifier, client: MaimaiClient) -> list[Score]:
-        url = f"{VITE_SUPABASE_URL}/updateUser"
+        url = f"{VITE_API_URL}/updateUser"
         response = requests.post(url, json=self._deser_identifier(identifier), verify=False)
         if response.status_code == 200:
             raw_result = response.json()
@@ -186,7 +186,7 @@ async def _(bot: NoneBot, ev: CQEvent):
     else:
         qr_code = None
         user_id_from_qr = None
-        if ev['message_type'] == 'private' and len(args) > 0:
+        if ev['message_type'] == 'private' and len(args) > 0:  # 私聊且提供了参数
             if len(args) == 1 and args[0].startswith('SGWCMAID') and len(args[0]) == 84:
                 qr_code = args[0][-64:]  # 取最后64个字符
             elif len(args) == 1 and args[0].startswith('https'):
@@ -203,7 +203,7 @@ async def _(bot: NoneBot, ev: CQEvent):
                 return
 
             # from SaltNet
-            url = f"{VITE_SUPABASE_URL}/getQRInfo"
+            url = f"{VITE_API_URL}/getQRInfo"
             response = requests.post(url, json={"qrCode": qr_code}, verify=False)
             if response.status_code == 200:
                 data = response.json()
@@ -221,9 +221,13 @@ async def _(bot: NoneBot, ev: CQEvent):
                 await bot.send(ev, msg, at_sender=False)
                 return
 
-        elif ev['message_type'] != 'private' and len(args) > 0:
-            msg = '只有私聊才能进行绑定操作哦(若要简略上传，请不要输入指令以外的额外字符)'
+        elif ev['message_type'] != 'private' and (len(args) == 1 and (args[0].startswith('SGWCMAID') or args[0].startswith('https'))):  # 非私聊但提供了合法参数
+            msg = '只有私聊才能进行绑定操作哦'
             await bot.send(ev, msg, at_sender=False)
+            return
+        elif len(args) == 0:  # 没有提供参数，进行简略上传
+            pass
+        else:  # 提供了参数但格式不合法
             return
 
         msg = None
@@ -318,7 +322,7 @@ async def _(bot: NoneBot, ev: CQEvent):
                         break
 
                     # from SaltNet
-                    url = f"{VITE_SUPABASE_URL}/getQRInfo"
+                    url = f"{VITE_API_URL}/getQRInfo"
                     response = requests.post(url, json={"qrCode": qr_code}, verify=False)
                     if response.status_code == 200:
                         data = response.json()
