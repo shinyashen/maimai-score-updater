@@ -1,7 +1,8 @@
 import asyncio, traceback, urllib3, re, requests, pathlib
-from maimai_py import DivingFishProvider, IScoreProvider, MaimaiClient, MaimaiScores, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
-from typing import List, Optional
+from maimai_py import DivingFishProvider, IProvider, IScoreProvider, IScoreUpdateProvider, MaimaiClient, MaimaiClientMultithreading, MaimaiScores, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
+from typing import List, Optional, Any, Callable, Literal
 from datetime import datetime
+from dataclasses import dataclass
 
 
 from nonebot import NoneBot
@@ -62,6 +63,129 @@ class MyProvider(IScoreProvider):
         )
 
 
+class MyMaimaiClient(MaimaiClientMultithreading):
+    async def delta_updates_chain(
+        self,
+        source: list[tuple[IScoreProvider, Optional[PlayerIdentifier], dict[str, Any]]],
+        target: list[tuple[IProvider, Optional[PlayerIdentifier], dict[str, Any]]],
+        source_mode: Literal["fallback", "parallel"] = "fallback",
+        target_mode: Literal["fallback", "parallel"] = "parallel",
+        source_gather_callback: Optional[Callable[[MaimaiScores, Optional[BaseException], dict[str, Any]], None]] = None,
+        target_gather_callback: Optional[Callable[[MaimaiScores, Optional[BaseException], dict[str, Any]], None]] = None,
+        target_update_callback: Optional[Callable[[MaimaiScores, Optional[BaseException], dict[str, Any]], None]] = None,
+    ) -> None:
+        """类似于updates_chain函数的链式更新，但在更新阶段仅上传增量更新（即与原成绩相比有变化的部分），而不是全部成绩。"""
+        # 比较谱面信息，如果达成率与dx分数都没有变化，则返回None
+        def _compare(score: Score, other: Optional[Score]) -> Score:
+            if other is not None:
+                if score.level_index != other.level_index or score.type != other.type:
+                    raise ValueError("Cannot compare scores with different level indexes or types")
+                if score.achievements <= other.achievements and score.dx_score <= other.dx_score:
+                    return None
+                score.achievements = max(score.achievements or 0, other.achievements or 0)
+                if score.fc != other.fc:
+                    self_fc = score.fc.value if score.fc is not None else 100
+                    other_fc = other.fc.value if other.fc is not None else 100
+                    selected_value = min(self_fc, other_fc)
+                    score.fc = FCType(selected_value) if selected_value != 100 else None
+                if score.fs != other.fs:
+                    self_fs = score.fs.value if score.fs is not None else -1
+                    other_fs = other.fs.value if other.fs is not None else -1
+                    selected_value = max(self_fs, other_fs)
+                    score.fs = FSType(selected_value) if selected_value != -1 else None
+                if score.rate != other.rate:
+                    selected_value = min(score.rate.value, other.rate.value)
+                    score.rate = RateType(selected_value)
+                if score.play_count != other.play_count:
+                    selected_value = max(score.play_count or 0, other.play_count or 0)
+                    score.play_count = selected_value
+            return score
+
+        for t in target:  # 检查目标Provider是否为IScoreProvider和IScoreUpdateProvider的子类
+            if not (isinstance(t[0], IScoreProvider)):
+                raise ValueError(f"Target provider does not support score fetching. Please use providers that implement IScoreProvider for the target.")
+            elif not (isinstance(t[0], IScoreUpdateProvider)):
+                raise ValueError(f"Target provider does not support score updating. Please use providers that implement IScoreUpdateProvider for the target.")
+
+        source_gather_tasks, target_gather_tasks, target_update_tasks = [], [], []
+        empty_scores = await MaimaiScores(self).configure([])
+
+        # Fetch scores from the source providers.
+        for sp, ident, kwargs in source:
+            if ident is not None:
+                if source_mode == "parallel" or (source_mode == "fallback" and len(source_gather_tasks) == 0):
+                    source_gather_task = asyncio.create_task(self.scores(ident, sp))
+                    if source_gather_callback is not None:
+                        source_gather_task.add_done_callback(
+                            lambda t, k=kwargs: source_gather_callback(
+                                t.result() if not t.exception() else empty_scores,
+                                t.exception(),
+                                k,
+                            )
+                        )
+                    source_gather_tasks.append(source_gather_task)
+        source_gather_results = await asyncio.gather(*source_gather_tasks, return_exceptions=True)
+        source_maimai_scores_list = [result for result in source_gather_results if isinstance(result, MaimaiScores)]
+
+        # Merge scores from all source maimai_scores instances.
+        source_scores_unique: dict[str, Score] = {}
+        for maimai_scores in source_maimai_scores_list:
+            for score in maimai_scores.scores:
+                score_key = f"{score.id} {score.type} {score.level_index}"
+                source_scores_unique[score_key] = score._join(source_scores_unique.get(score_key, None))
+        merged_source_scores = list(source_scores_unique.values())
+        merged_source_maimai_scores = await MaimaiScores(self).configure(merged_source_scores)
+
+        # Fetch scores from the target providers.
+        for sp, ident, kwargs in target:
+            if ident is not None:
+                if target_mode == "parallel" or (target_mode == "fallback" and len(target_gather_tasks) == 0):
+                    target_gather_task = asyncio.create_task(self.scores(ident, sp))
+                    if target_gather_callback is not None:
+                        target_gather_task.add_done_callback(
+                            lambda t, k=kwargs: target_gather_callback(
+                                t.result() if not t.exception() else empty_scores,
+                                t.exception(),
+                                k,
+                            )
+                        )
+                    target_gather_tasks.append(target_gather_task)
+        target_gather_results = await asyncio.gather(*target_gather_tasks, return_exceptions=True)
+        target_maimai_scores_list = [result for result in target_gather_results if isinstance(result, MaimaiScores)]
+
+        # Merge scores from all target maimai_scores instances.
+        target_scores_unique: dict[str, Score] = {}
+        for maimai_scores in target_maimai_scores_list:
+            for score in maimai_scores.scores:
+                score_key = f"{score.id} {score.type} {score.level_index}"
+                target_scores_unique[score_key] = score._join(target_scores_unique.get(score_key, None))
+        merged_target_scores = list(target_scores_unique.values())
+        merged_target_maimai_scores = await MaimaiScores(self).configure(merged_target_scores)
+
+        # Generate delta updates.
+        delta_scores_unique: dict[str, Score] = {}
+        for score in merged_source_maimai_scores.scores:
+            score_key = f"{score.id} {score.type} {score.level_index}"
+            delta_score = _compare(score, target_scores_unique.get(score_key, None))
+            if delta_score is not None:
+                delta_scores_unique[score_key] = delta_score
+        delta_scores = list(delta_scores_unique.values())
+        delta_maimai_scores = await MaimaiScores(self).configure(delta_scores)
+
+        # Update scores to the target providers.
+        for tp, ident, kwargs in target:
+            if ident is not None:
+                if target_mode == "parallel" or (target_mode == "fallback" and len(target_update_tasks) == 0):
+                    target_task = asyncio.create_task(self.updates(ident, delta_scores, tp))
+                    if target_update_callback is not None:
+                        target_task.add_done_callback(
+                            lambda t, k=kwargs: target_update_callback(delta_maimai_scores, t.exception(), k)
+                        )
+                    target_update_tasks.append(target_task)
+        await asyncio.gather(*target_update_tasks, return_exceptions=True)
+
+
+maimai = MyMaimaiClient(timeout=60)
 bindwx = sv.on_prefix(['bindwx', '绑定微信'])
 binddf = sv.on_prefix(['binddf', '绑定水鱼'])
 update = sv.on_prefix(['wmupdate', '上传分数', '传分', '导'])
@@ -144,7 +268,6 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
             else:
                 await bot.send(ev, f'正在上传分数，请稍等...\n最近上传时间: {lastupdate}', at_sender=False)
 
-    maimai = MaimaiClient(timeout=60)
     diving_provider = DivingFishProvider()
     arcade_provider = MyProvider()
     diving_player = PlayerIdentifier(credentials=imtoken)
