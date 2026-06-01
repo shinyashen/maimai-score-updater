@@ -241,13 +241,19 @@ async def send_forward_msg(bot: NoneBot, ev: CQEvent, msg_list: list[str] | dict
 
 async def update_score(user, qrcode: str = None, special_flag: bool = False, repeat_flag: bool = False, bot: NoneBot = None, ev: CQEvent = None) -> tuple[str, str]:
     """上传分数主函数"""
-    def source_callback(scores: MaimaiScores, err: Optional[BaseException], context: dict) -> None:
+    def source_gather_callback(scores: MaimaiScores, err: Optional[BaseException], context: dict) -> None:
         if err:
             log.error(f"从{context.get('name')}源获取数据失败:\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}")
         else:
             log.info(f"从{context.get('name')}源获取数据成功，共 {len(scores.scores)} 条成绩")
 
-    def target_callback(scores: MaimaiScores, err: Optional[BaseException], context: dict) -> None:
+    def target_gather_callback(scores: MaimaiScores, err: Optional[BaseException], context: dict) -> None:
+        if err:
+            log.error(f"从{context.get('name')}源获取数据失败:\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}")
+        else:
+            log.info(f"从{context.get('name')}源获取数据成功，共 {len(scores.scores)} 条成绩")
+
+    def target_update_callback(scores: MaimaiScores, err: Optional[BaseException], context: dict) -> None:
         if err:
             log.error(f"更新到目标{context.get('name')}失败:\n{''.join(traceback.format_exception(type(err), err, err.__traceback__))}")
         else:
@@ -276,7 +282,7 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
     target_providers = [(diving_provider, diving_player, {"name": "divingfish"})]
     if not qrcode:  # 简略上传需要对成绩进行补充
         source_providers.append((diving_provider, diving_player, {"name": "divingfish"}))
-    task = asyncio.create_task(maimai.updates_chain(source_providers, target_providers, "parallel", "parallel", source_callback, target_callback))
+    task = asyncio.create_task(maimai.delta_updates_chain(source_providers, target_providers, "parallel", "parallel", source_gather_callback, target_gather_callback, target_update_callback))
 
     update_tasks = []
     update_tasks.append(task)
