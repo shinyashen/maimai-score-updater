@@ -280,7 +280,10 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
     arcade_player = MyProvider._ser_identifier(userid=userid, qrcode=qrcode)
     source_providers = [(arcade_provider, arcade_player, {"name": "arcade"})]
     target_providers = [(diving_provider, diving_player, {"name": "divingfish"})]
-    task = asyncio.create_task(maimai.delta_updates_chain(source_providers, target_providers, "parallel", "parallel", source_gather_callback, target_gather_callback, target_update_callback))
+    if not qrcode:  # 简略上传需要对成绩进行补充
+        task = asyncio.create_task(maimai.delta_updates_chain(source_providers, target_providers, "parallel", "parallel", source_gather_callback, target_gather_callback, target_update_callback))
+    else:  # 全量上传直接上传原成绩
+        task = asyncio.create_task(maimai.updates_chain(source_providers, target_providers, "parallel", "parallel", source_gather_callback, target_update_callback))
 
     update_tasks = []
     update_tasks.append(task)
