@@ -1,5 +1,5 @@
 import asyncio, traceback, urllib3, re, requests, pathlib
-from maimai_py import DivingFishProvider, IProvider, IScoreProvider, IScoreUpdateProvider, MaimaiClient, MaimaiClientMultithreading, MaimaiScores, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
+from maimai_py import DivingFishProvider, LXNSProvider, IProvider, IScoreProvider, IScoreUpdateProvider, MaimaiClient, MaimaiClientMultithreading, MaimaiScores, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
 from typing import List, Optional, Any, Callable, Literal, Iterable
 from datetime import datetime
 from dataclasses import dataclass
@@ -201,8 +201,8 @@ class MyMaimaiClient(MaimaiClientMultithreading):
 maimai = MyMaimaiClient(timeout=60)
 bindwx = sv.on_prefix(['bindwx', '绑定微信'])
 binddf = sv.on_prefix(['binddf', '绑定水鱼'])
+bindlx = sv.on_prefix(['bindlx', '绑定落雪'])
 update = sv.on_prefix(['wmupdate', '上传分数', '传分', '导'])
-autoupdate = sv.on_suffix(['autoupdate', '自动上传'])
 
 
 async def get_db() -> UserDatabase:
@@ -272,11 +272,12 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
         else:
             log.info(f"更新到目标{context.get('name')}成功，共 {len(scores.scores)} 条成绩")
 
-    imtoken = user[1]
-    userid = user[2]
-    lastupdate = user[3]
+    dftoken = user[1]
+    lxtoken = user[2]
+    userid = user[3]
+    lastupdate = user[4]
     if not repeat_flag:
-        if not lastupdate or lastupdate.lower() == 'none' or lastupdate.lower() == 'null' or lastupdate == '' or lastupdate.lower() == 0:
+        if not UserDatabase.is_null_or_empty(lastupdate):
             if special_flag:
                 await bot.send(ev, '推分了？你先别急', at_sender=False)
             else:
@@ -287,12 +288,21 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
             else:
                 await bot.send(ev, f'正在上传分数，请稍等...\n最近上传时间: {lastupdate}', at_sender=False)
 
-    diving_provider = DivingFishProvider()
     arcade_provider = MyProvider()
-    diving_player = PlayerIdentifier(credentials=imtoken)
     arcade_player = MyProvider._ser_identifier(userid=userid, qrcode=qrcode)
     source_providers = [(arcade_provider, arcade_player, {"name": "arcade"})]
-    target_providers = [(diving_provider, diving_player, {"name": "divingfish"})]
+    
+    target_providers = []
+    if not UserDatabase.is_null_or_empty(dftoken):
+        diving_provider = DivingFishProvider()
+        diving_player = PlayerIdentifier(credentials=dftoken)
+        target_providers.append((diving_provider, diving_player, {"name": "divingfish"}))
+    
+    if not UserDatabase.is_null_or_empty(lxtoken):
+        lxns_provider = LXNSProvider()
+        lxns_player = PlayerIdentifier(credentials=lxtoken)
+        target_providers.append((lxns_provider, lxns_player, {"name": "lxns"}))
+
     if not qrcode:  # 简略上传需要对成绩进行补充
         task = asyncio.create_task(maimai.delta_updates_chain(source_providers, target_providers, "parallel", "parallel", source_gather_callback, target_gather_callback, target_update_callback))
     else:  # 全量上传直接上传原成绩
@@ -322,7 +332,8 @@ async def _(bot: NoneBot, ev: CQEvent):
             "1. 绑定微信/bindwx <SGWCMAID.../https...>: 绑定微信公众号二维码，可输入二维码进行识别后的内容(SGWCMAID开头)，或者二维码页面的网页链接(https开头)": "text",
             "2. 绑定水鱼/binddf <水鱼成绩导入token>: 绑定水鱼成绩导入token": "text",
             f"{pic_uri}": "image",
-            "3. 上传分数/导/wmupdate [SGWCMAID.../https...]: 上传分数数据至水鱼数据库，全量上传时仅支持私聊": "text",
+            "3. 绑定落雪/bindlx <落雪成绩导入token>: 绑定落雪成绩导入token，在https://maimai.lxns.net/user/profile?tab=thirdparty页面的“个人 API 密钥”标签中可以找到": "text",
+            "4. 上传分数/导/wmupdate [SGWCMAID.../https...]: 上传分数数据至水鱼数据库，全量上传时仅支持私聊": "text",
             "上传说明：若上传指令不带有二维码信息，则默认进行简略上传，*仅上传*达成率与dx分数；若上传指令带有二维码信息，则进行全量上传。": "text"
         }
         await send_forward_msg(bot, ev, help_msg, name="上传帮助")
@@ -380,17 +391,18 @@ async def _(bot: NoneBot, ev: CQEvent):
             db = await get_db()
             user = await db.get_user(qqid)
             if user:
-                imtoken = user[1]
-                userid = user[2]
+                dftoken = user[1]
+                lxtoken = user[2]
+                userid = user[3]
             else:
                 msg = '未绑定任何账号，请先绑定微信二维码信息与水鱼账号，查看帮助请输入“上传分数帮助”'
                 if special_flag:
                     msg = '几把怎么连导都不会。。。想知道怎么导？对我说“导帮助”喵'
                 return
-            if not imtoken:
-                msg = '请绑定水鱼成绩导入token信息'
+            if not (dftoken or lxtoken):
+                msg = '请绑定水鱼或落雪成绩导入token信息'
                 if special_flag:
-                    msg = '没绑水鱼token你怎么导。。。'
+                    msg = '没绑数据站你怎么导。。。'
                 return
             if not userid:
                 msg = '请绑定微信二维码信息'
@@ -422,12 +434,12 @@ async def _(bot: NoneBot, ev: CQEvent):
 
         except InvalidPlayerIdentifierError as e:
             traceback.print_exc()
-            log.error(f"水鱼成绩导入token无效: {e}")
-            msg = '水鱼成绩导入token无效，请检查成绩导入token的有效性'
+            log.error(f"成绩导入token无效: {e}")
+            msg = '成绩导入token无效，请检查成绩导入token的有效性'
         except PrivacyLimitationError as e:
             traceback.print_exc()
             log.error(f"隐私限制错误: {e}")
-            msg = '你没有同意水鱼的用户协议，无法完成该操作'
+            msg = '你没有同意数据站的相关用户协议，无法完成该操作'
         except Exception as e:
             traceback.print_exc()
             log.error(f"发生意外错误: {e}")
@@ -535,5 +547,42 @@ async def _(bot: NoneBot, ev: CQEvent):
         traceback.print_exc()
         log.error(f"发生意外错误: {e}")
         msg = '绑定水鱼token失败，请反馈给开发者！'
+    finally:
+        await bot.send(ev, msg, at_sender=False)
+
+@bindlx
+async def _(bot: NoneBot, ev: CQEvent):
+    try:
+        qqid = ev.user_id
+        db = await get_db()
+
+        args: List[str] = ev.message.extract_plain_text().strip().split()
+        msg = None
+        if len(args) == 1 and args[0] == '帮助':
+            msg = '绑定落雪/bindlx(不带斜杠) <落雪成绩导入token>: 绑定落雪成绩导入token，仅能在私聊绑定'
+        elif ev['message_type'] == 'private':
+            if len(args) == 1:
+                lxns_provider = LXNSProvider()
+                url, headers, _ = await lxns_provider._build_player_request("", PlayerIdentifier(credentials=args[0]), maimai)
+                resp = await maimai._client.get(url, headers=headers)
+                lxns_provider._check_response_player(resp)["data"]
+                await db.update_user(qq=qqid, lxtoken=args[0])
+                msg = '绑定落雪成绩导入token成功'
+            else:
+                msg = '请提供正确格式的落雪成绩导入token'
+        else:
+            msg = '只有私聊才能进行绑定操作哦'
+    except InvalidPlayerIdentifierError as e:
+        traceback.print_exc()
+        log.error(f"落雪成绩导入token无效: {e}")
+        msg = '落雪成绩导入token无效，请检查成绩导入token的有效性'
+    except PrivacyLimitationError as e:
+        traceback.print_exc()
+        log.error(f"隐私限制错误: {e}")
+        msg = '你没有同意落雪的用户协议，无法完成该操作'
+    except Exception as e:
+        traceback.print_exc()
+        log.error(f"发生意外错误: {e}")
+        msg = '绑定落雪token失败，请反馈给开发者！'
     finally:
         await bot.send(ev, msg, at_sender=False)

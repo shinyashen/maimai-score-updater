@@ -28,7 +28,8 @@ class UserDatabase:
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS users (
                     qq TEXT PRIMARY KEY,          -- QQ号作为主键
-                    imtoken TEXT,                 -- 水鱼成绩导入token
+                    dftoken TEXT,                 -- 水鱼成绩导入token
+                    lxtoken TEXT,                 -- 落雪成绩导入token
                     userid TEXT,                  -- userid(from SGWCMAID)
                     lastupdate TEXT               -- 最后成功更新时间
                 );"""
@@ -37,18 +38,24 @@ class UserDatabase:
         cls._instance = cls(db)
         return cls._instance
 
-    async def update_user(self, qq: str, imtoken: str = None, userid: str = None, lastupdate: str = None):
+    @staticmethod
+    def is_null_or_empty(value: Optional[str]) -> bool:
+        """检查字符串是否为None或空字符串"""
+        return value is None or value.lower() == 'none' or value.lower() == 'null' or value == '' or value.lower() == 0
+
+    async def update_user(self, qq: str, dftoken: str = None, lxtoken: str = None, userid: str = None, lastupdate: str = None):
         """更新用户信息"""
         insert_sql = """
-        INSERT OR REPLACE INTO users (qq, imtoken, userid, lastupdate)
-        VALUES (:qq, :imtoken, :userid, :lastupdate)
+        INSERT OR REPLACE INTO users (qq, dftoken, lxtoken, userid, lastupdate)
+        VALUES (:qq, :dftoken, :lxtoken, :userid, :lastupdate)
         ON CONFLICT(qq) DO UPDATE SET
-            imtoken = COALESCE(excluded.imtoken, users.imtoken),
+            dftoken = COALESCE(excluded.dftoken, users.dftoken),
+            lxtoken = COALESCE(excluded.lxtoken, users.lxtoken),
             userid = COALESCE(excluded.userid, users.userid),
             lastupdate = COALESCE(excluded.lastupdate, users.lastupdate)
         """
         async with self._db as db:
-            await db.execute(insert_sql, {"qq": qq, "imtoken": imtoken, "userid": userid, "lastupdate": lastupdate})
+            await db.execute(insert_sql, {"qq": qq, "dftoken": dftoken, "lxtoken": lxtoken, "userid": userid, "lastupdate": lastupdate})
 
     async def get_user(self, qq: str) -> tuple:
         """根据QQ号获取用户信息"""
