@@ -1,6 +1,6 @@
 import asyncio, traceback, urllib3, re, requests, pathlib
 from maimai_py import DivingFishProvider, IProvider, IScoreProvider, IScoreUpdateProvider, MaimaiClient, MaimaiClientMultithreading, MaimaiScores, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
-from typing import List, Optional, Any, Callable, Literal
+from typing import List, Optional, Any, Callable, Literal, Iterable
 from datetime import datetime
 from dataclasses import dataclass
 
@@ -52,7 +52,7 @@ class MyProvider(IScoreProvider):
             level=None,
             level_index=LevelIndex(int(score['level'])) if int(score['level']) < 5 else LevelIndex(0),  # utage=10
             achievements=achievement,
-            fc=FCType(4-int(score['comboStatus'])) if int(score['comboStatus']) else None,
+            fc=FCType(4-int(score['comboStatus'])) if int(score['comboStatus']) else FCType.APP if achievement == 101.0 else None,
             fs=FSType(int(score['syncStatus']) % 5) if int(score['syncStatus']) else None,
             dx_score=int(score['deluxscoreMax']),
             dx_rating=None,
@@ -75,6 +75,19 @@ class MyMaimaiClient(MaimaiClientMultithreading):
         target_update_callback: Optional[Callable[[MaimaiScores, Optional[BaseException], dict[str, Any]], None]] = None,
     ) -> None:
         """类似于updates_chain函数的链式更新，但在更新阶段仅上传增量更新（即与原成绩相比有变化的部分），而不是全部成绩。"""
+        # 合并若干个成绩对象，但是均取较低值
+        def _join_rev(scores: Iterable[Score]) -> Score:
+            scores_list = list(scores)
+            if not scores_list:
+                raise ValueError("至少需要一个 Score")
+            res = scores_list[0]
+            res.achievements = min(s.achievements or 0 for s in scores_list)
+            res.fc = FCType(max(s.fc.value for s in scores_list)) if any(s.fc is not None for s in scores_list) else None
+            res.fs = FSType(min(s.fs.value for s in scores_list)) if any(s.fs is not None for s in scores_list) else None
+            res.rate = RateType._from_achievement(res.achievements)
+            res.play_count = min(s.play_count or 0 for s in scores_list)
+            return res
+
         # 比较谱面信息，如果达成率与dx分数都没有变化，则返回None
         def _compare(score: Score, other: Optional[Score]) -> Score:
             if other is not None:
@@ -154,14 +167,14 @@ class MyMaimaiClient(MaimaiClientMultithreading):
         target_maimai_scores_list = [result for result in target_gather_results if isinstance(result, MaimaiScores)]
 
         # Merge scores from all target maimai_scores instances.
-        target_scores_unique: dict[str, Score] = {}
-        for maimai_scores in target_maimai_scores_list:
-            for score in maimai_scores.scores:
-                score_key = f"{score.id} {score.type} {score.level_index}"
-                target_scores_unique[score_key] = score._join(target_scores_unique.get(score_key, None))
-        merged_target_scores = list(target_scores_unique.values())
-        merged_target_maimai_scores = await MaimaiScores(self).configure(merged_target_scores)
-
+        target_scores_dict_list = [
+            {f"{score.id} {score.type} {score.level_index}": score
+            for score in maimai_scores.scores}
+            for maimai_scores in target_maimai_scores_list
+        ]
+        common_keys = set.intersection(*(d.keys() for d in target_scores_dict_list))
+        target_scores_unique = {k: _join_rev(d[k] for d in target_scores_dict_list) for k in common_keys}
+        
         # Generate delta updates.
         delta_scores_unique: dict[str, Score] = {}
         for score in merged_source_maimai_scores.scores:
