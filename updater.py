@@ -82,8 +82,8 @@ class MyMaimaiClient(MaimaiClientMultithreading):
                 raise ValueError("至少需要一个 Score")
             res = scores_list[0]
             res.achievements = min(s.achievements or 0 for s in scores_list)
-            res.fc = FCType(max(s.fc.value if s.fc is not None else 100 for s in scores_list)) if any(s.fc is not None for s in scores_list) else None
-            res.fs = FSType(min(s.fs.value if s.fs is not None else -1 for s in scores_list)) if any(s.fs is not None for s in scores_list) else None
+            res.fc = FCType(v := max(s.fc.value if s.fc is not None else 100 for s in scores_list) if v != 100 else None) if any(s.fc is not None for s in scores_list) else None
+            res.fs = FSType(v := min(s.fs.value if s.fs is not None else -1 for s in scores_list) if v != -1 else None) if any(s.fs is not None for s in scores_list) else None
             res.rate = RateType._from_achievement(res.achievements)
             res.play_count = min(s.play_count or 0 for s in scores_list)
             return res
@@ -279,7 +279,7 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
     userid = user[3]
     lastupdate = user[4]
     if not repeat_flag:
-        if not UserDatabase.is_null_or_empty(lastupdate):
+        if UserDatabase.is_null_or_empty(lastupdate):
             if special_flag:
                 await bot.send(ev, '推分了？你先别急', at_sender=False)
             else:
