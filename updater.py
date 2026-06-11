@@ -82,14 +82,8 @@ class MyMaimaiClient(MaimaiClientMultithreading):
                 raise ValueError("至少需要一个 Score")
             res = scores_list[0]
             res.achievements = min(s.achievements or 0 for s in scores_list)
-            if any(s.fc is not None for s in scores_list):
-                res.fc = FCType(max(s.fc.value for s in scores_list))
-            else:
-                res.fc = None
-            if any(s.fs is not None for s in scores_list):
-                res.fs = FSType(min(s.fs.value for s in scores_list))
-            else:
-                res.fs = None
+            res.fc = FCType(max(s.fc.value for s in scores_list)) if all(s.fc is not None for s in scores_list) else None
+            res.fs = FSType(min(s.fs.value for s in scores_list)) if all(s.fs is not None for s in scores_list) else None
             res.rate = RateType._from_achievement(res.achievements)
             res.play_count = min(s.play_count or 0 for s in scores_list)
             return res
