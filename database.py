@@ -41,7 +41,7 @@ class UserDatabase:
     @staticmethod
     def is_null_or_empty(value: Optional[str]) -> bool:
         """检查字符串是否为None或空字符串"""
-        return value is None or value.lower() == 'none' or value.lower() == 'null' or value == '' or value.lower() == 0
+        return value is None or value == ''
 
     async def update_user(self, qq: str, dftoken: str = None, lxtoken: str = None, userid: str = None, lastupdate: str = None):
         """更新用户信息"""
