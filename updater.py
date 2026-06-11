@@ -2,7 +2,6 @@ import asyncio, traceback, urllib3, re, requests, pathlib
 from maimai_py import DivingFishProvider, LXNSProvider, IProvider, IScoreProvider, IScoreUpdateProvider, MaimaiClient, MaimaiClientMultithreading, MaimaiScores, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
 from typing import List, Optional, Any, Callable, Literal, Iterable
 from datetime import datetime
-from dataclasses import dataclass
 
 
 from nonebot import NoneBot
@@ -75,15 +74,16 @@ class MyMaimaiClient(MaimaiClientMultithreading):
         target_update_callback: Optional[Callable[[MaimaiScores, Optional[BaseException], dict[str, Any]], None]] = None,
     ) -> None:
         """类似于updates_chain函数的链式更新，但在更新阶段仅上传增量更新（即与原成绩相比有变化的部分），而不是全部成绩。"""
-        # 合并若干个成绩对象，但是均取较低值
+        # 合并成绩对象迭代列表
         def _join_rev(scores: Iterable[Score]) -> Score:
             scores_list = list(scores)
             if not scores_list:
                 raise ValueError("至少需要一个 Score")
             res = scores_list[0]
             res.achievements = min(s.achievements or 0 for s in scores_list)
-            res.fc = FCType(max(s.fc.value for s in scores_list)) if all(s.fc is not None for s in scores_list) else None
-            res.fs = FSType(min(s.fs.value for s in scores_list)) if all(s.fs is not None for s in scores_list) else None
+            res.dx_score = min(s.dx_score or 0 for s in scores_list)
+            res.fc = FCType(min(s.fc.value for s in scores_list)) if all(s.fc is not None for s in scores_list) else None
+            res.fs = FSType(max(s.fs.value for s in scores_list)) if all(s.fs is not None for s in scores_list) else None
             res.rate = RateType._from_achievement(res.achievements)
             res.play_count = min(s.play_count or 0 for s in scores_list)
             return res
@@ -96,6 +96,7 @@ class MyMaimaiClient(MaimaiClientMultithreading):
                 if score.achievements <= other.achievements and score.dx_score <= other.dx_score:
                     return None
                 score.achievements = max(score.achievements or 0, other.achievements or 0)
+                score.dx_score = max(score.dx_score or 0, other.dx_score or 0)
                 if score.fc != other.fc:
                     self_fc = score.fc.value if score.fc is not None else 100
                     other_fc = other.fc.value if other.fc is not None else 100
@@ -201,9 +202,9 @@ class MyMaimaiClient(MaimaiClientMultithreading):
 
 
 maimai = MyMaimaiClient(timeout=60)
-bindwx = sv.on_prefix(['bindwx', '绑定微信'])
-binddf = sv.on_prefix(['binddf', '绑定水鱼'])
-bindlx = sv.on_prefix(['bindlx', '绑定落雪'])
+bindwx = sv.on_prefix(['bindwx', '微信绑定'])
+binddf = sv.on_prefix(['binddf', '水鱼绑定'])
+bindlx = sv.on_prefix(['bindlx', '落雪绑定'])
 update = sv.on_prefix(['wmupdate', '上传分数', '传分', '导'])
 
 
@@ -279,7 +280,7 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
     userid = user[3]
     lastupdate = user[4]
     if not repeat_flag:
-        if UserDatabase.is_null_or_empty(lastupdate):
+        if not lastupdate:
             if special_flag:
                 await bot.send(ev, '推分了？你先别急', at_sender=False)
             else:
@@ -295,12 +296,12 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
     source_providers = [(arcade_provider, arcade_player, {"name": "arcade"})]
     
     target_providers = []
-    if not UserDatabase.is_null_or_empty(dftoken):
+    if dftoken:
         diving_provider = DivingFishProvider()
         diving_player = PlayerIdentifier(credentials=dftoken)
         target_providers.append((diving_provider, diving_player, {"name": "divingfish"}))
     
-    if not UserDatabase.is_null_or_empty(lxtoken):
+    if lxtoken:
         lxns_provider = LXNSProvider()
         lxns_player = PlayerIdentifier(credentials=lxtoken)
         target_providers.append((lxns_provider, lxns_player, {"name": "lxns"}))
@@ -317,9 +318,9 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, rep
     log.info("分数上传成功")
 
     if special_flag:
-        return f'水鱼接受了你的导！\n你这次导的时间为: {timenow}\n怎么导的：{"简单的导" if not qrcode else "好好的导"}', timenow
+        return f'导出来了喵！\n你这次导的时间为: {timenow}\n怎么导的：{"简单的导" if not qrcode else "好好的导"}', timenow
     else:
-        return f'上传分数至水鱼成功！\n本次上传时间: {timenow}\n上传方式：{"简略上传" if not qrcode else "全量上传"}', timenow
+        return f'上传分数至数据库成功！\n本次上传时间: {timenow}\n上传方式：{"简略上传" if not qrcode else "全量上传"}', timenow
 
 
 @update
@@ -328,14 +329,14 @@ async def _(bot: NoneBot, ev: CQEvent):
     if len(args) == 1 and args[0] == '帮助':
         pic_uri = (pathlib.Path(__file__).parent.resolve() / 'import_token.jpg').as_uri()
         help_msg = {
-            "上传国服maimaiDX成绩至水鱼数据库，指令*不带斜杠*，仅能在*私聊*进行相关绑定操作。": "text",
+            "上传国服maimaiDX成绩至成绩数据库，指令*不带斜杠*，仅能在*私聊*进行相关绑定操作。": "text",
             "参数说明：尖角括号<>包裹的是必填参数，方括号[]包裹的是可选参数。请不要连带括号一起输入！": "text",
             "指令列表：": "text",
-            "1. 绑定微信/bindwx <SGWCMAID.../https...>: 绑定微信公众号二维码，可输入二维码进行识别后的内容(SGWCMAID开头)，或者二维码页面的网页链接(https开头)": "text",
-            "2. 绑定水鱼/binddf <水鱼成绩导入token>: 绑定水鱼成绩导入token": "text",
+            "1. 微信绑定/bindwx <SGWCMAID.../https...>: 绑定微信公众号二维码，可输入二维码进行识别后的内容(SGWCMAID开头)，或者二维码页面的网页链接(https开头)": "text",
+            "2. 水鱼绑定/binddf <水鱼成绩导入token>: 绑定水鱼成绩导入token": "text",
             f"{pic_uri}": "image",
-            "3. 绑定落雪/bindlx <落雪成绩导入token>: 绑定落雪成绩导入token，在https://maimai.lxns.net/user/profile?tab=thirdparty页面的“个人 API 密钥”标签中可以找到": "text",
-            "4. 上传分数/导/wmupdate [SGWCMAID.../https...]: 上传分数数据至水鱼数据库，全量上传时仅支持私聊": "text",
+            "3. 落雪绑定/bindlx <落雪成绩导入token>: 绑定落雪成绩导入token，在https://maimai.lxns.net/user/profile?tab=thirdparty页面的“个人 API 密钥”标签中可以找到": "text",
+            "4. 上传分数/导/传分/wmupdate [SGWCMAID.../https...]: 上传分数数据至绑定的成绩数据库，全量上传时仅支持私聊": "text",
             "上传说明：若上传指令不带有二维码信息，则默认进行简略上传，*仅上传*达成率与dx分数；若上传指令带有二维码信息，则进行全量上传。": "text"
         }
         await send_forward_msg(bot, ev, help_msg, name="上传帮助")

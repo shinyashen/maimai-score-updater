@@ -38,11 +38,6 @@ class UserDatabase:
         cls._instance = cls(db)
         return cls._instance
 
-    @staticmethod
-    def is_null_or_empty(value: Optional[str]) -> bool:
-        """检查字符串是否为None或空字符串"""
-        return value is None or value == ''
-
     async def update_user(self, qq: str, dftoken: str = None, lxtoken: str = None, userid: str = None, lastupdate: str = None):
         """更新用户信息"""
         insert_sql = """
