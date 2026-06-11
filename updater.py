@@ -172,7 +172,9 @@ class MyMaimaiClient(MaimaiClientMultithreading):
             for score in maimai_scores.scores}
             for maimai_scores in target_maimai_scores_list
         ]
-        common_keys = set.intersection(*(d.keys() for d in target_scores_dict_list))
+        common_keys = set(target_scores_dict_list[0].keys())
+        for d in target_scores_dict_list[1:]:
+            common_keys.intersection_update(d.keys())
         target_scores_unique = {k: _join_rev(d[k] for d in target_scores_dict_list) for k in common_keys}
         
         # Generate delta updates.
