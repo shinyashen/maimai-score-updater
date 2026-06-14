@@ -249,6 +249,7 @@ async def get_valid_dftoken(dftoken: str) -> tuple[str, str]:
         else:
             empty_scores = await MaimaiScores(maimai).configure([])
             await DivingFishProvider().update_scores(PlayerIdentifier(credentials=dftoken), empty_scores.scores, maimai) # 上传空成绩测试token有效性，若无效会抛出异常
+            msg = '绑定水鱼成绩导入token成功'
             token = dftoken
     except InvalidPlayerIdentifierError as e:
         traceback.print_exc()
@@ -275,6 +276,7 @@ async def get_valid_lxtoken(lxtoken: str) -> tuple[str, str]:
         url, headers, _ = await lxns_provider._build_player_request("", PlayerIdentifier(credentials=lxtoken), maimai)
         resp = await maimai._client.get(url, headers=headers)
         lxns_provider._check_response_player(resp)  # 获取玩家信息测试token有效性，若无效会抛出异常
+        msg = '绑定落雪成绩导入token成功'
         token = lxtoken
     except InvalidPlayerIdentifierError as e:
         traceback.print_exc()
