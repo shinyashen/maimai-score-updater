@@ -116,19 +116,22 @@ async def _(bot: NoneBot, ev: CQEvent):
             dftoken = user[1]
             lxtoken = user[2]
             userid = user[3]
+            
+            if not (dftoken or lxtoken):
+                msg = '没绑数据站你怎么导。。。' if special_flag else '请绑定水鱼或落雪成绩导入token信息'
+            if not userid:
+                msg = '没绑微信二维码你怎么导。。。' if special_flag else '请绑定微信二维码信息'
+            elif user_id_from_qr and str(userid) != str(user_id_from_qr):
+                msg = '怎么，还想帮别人导一导？' if special_flag else '你提供的二维码所对应账号与之前绑定的账号不匹配，请检查后重新输入'
+
+            if not msg:
+                msg, timenow = await update_score(user, qr_code, special_flag, bot, ev)
+                if timenow:
+                    await db.update_user(qq=qqid, lastupdate=timenow)
+
         else:
             msg = '几把怎么连导都不会。。。想知道怎么导？对我说“导帮助”喵' if special_flag else '未绑定任何账号，请先绑定微信二维码信息与水鱼账号，查看帮助请输入“上传分数帮助”'
-        if not (dftoken or lxtoken):
-            msg = '没绑数据站你怎么导。。。' if special_flag else '请绑定水鱼或落雪成绩导入token信息'
-        if not userid:
-            msg = '没绑微信二维码你怎么导。。。' if special_flag else '请绑定微信二维码信息'
-        elif user_id_from_qr and str(userid) != str(user_id_from_qr):
-            msg = '怎么，还想帮别人导一导？' if special_flag else '你提供的二维码所对应账号与之前绑定的账号不匹配，请检查后重新输入'
-
-        if not msg:
-            msg, timenow = await update_score(user, qr_code, special_flag, bot, ev)
-            if timenow:
-                await db.update_user(qq=qqid, lastupdate=timenow)
+        
         await bot.send(ev, msg, at_sender=False)
 
 
