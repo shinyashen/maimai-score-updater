@@ -202,8 +202,8 @@ VITE_API_URL = "https://salt_api_main.realtvop.top"
 VITE_API_FALLBACK_URL = "https://salt_api_backup.realtvop.top"
 
 
-async def get_user_id(info_str: str) -> tuple[str, str]:
-    """从二维码信息字符串中提取用户ID，返回消息和用户ID的元组"""
+async def get_valid_userid(info_str: str) -> tuple[str, str, str]:
+    """从二维码信息字符串中提取用户ID，返回消息、二维码和用户ID构成的元组"""
     if info_str.startswith('SGWCMAID') and len(info_str) == 84:
         qr_code = info_str[-64:]  # 取最后64个字符
     elif info_str.startswith('https'):
@@ -212,10 +212,10 @@ async def get_user_id(info_str: str) -> tuple[str, str]:
             qr_code = matches[0][-64:]  # 取第一个匹配结果的最后64位
         else:
             msg = '二维码链接解析失败，请检查内容是否正确'
-            return msg, None
+            return msg, None, None
     else:
         msg = '请提供正确格式的内容(SGWCMAID.../https...)！'
-        return msg, None
+        return msg, None, None
 
     # from SaltNet
     url = f"{VITE_API_URL}/getQRInfo"
@@ -230,13 +230,13 @@ async def get_user_id(info_str: str) -> tuple[str, str]:
         else:
             log.error(f"主API和备用API均无法访问，状态码分别为 {response.status_code} 和 {response_fallback.status_code}")
             msg = '无法解析二维码，请联系开发者'
-            return msg, None
+            return msg, None, None
     if data.get("errorID") == 0:
         msg = '绑定微信二维码信息成功'
-        return msg, data.get("userID")
+        return msg, qr_code, data.get("userID")
     else:
         msg = '二维码/链接解析失败，请检查内容是否正确/是否在有效期内'
-        return msg, None
+        return msg, None, None
 
 
 async def get_valid_dftoken(dftoken: str) -> tuple[str, str]:
