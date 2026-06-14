@@ -248,7 +248,7 @@ async def get_valid_dftoken(dftoken: str) -> tuple[str, str]:
             msg = '请提供正确格式的水鱼成绩导入token'
         else:
             empty_scores = await MaimaiScores(maimai).configure([])
-            DivingFishProvider().update_scores(PlayerIdentifier(credentials=dftoken), empty_scores.scores, maimai) # 上传空成绩测试token有效性，若无效会抛出异常
+            await DivingFishProvider().update_scores(PlayerIdentifier(credentials=dftoken), empty_scores.scores, maimai) # 上传空成绩测试token有效性，若无效会抛出异常
             token = dftoken
     except InvalidPlayerIdentifierError as e:
         traceback.print_exc()
