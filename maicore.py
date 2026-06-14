@@ -1,5 +1,5 @@
 import asyncio, traceback, urllib3, re, requests
-from maimai_py import DivingFishProvider, LXNSProvider, IProvider, IScoreProvider, IScoreUpdateProvider, MaimaiClient, MaimaiClientMultithreading, MaimaiScores, PlayerIdentifier, InvalidPlayerIdentifierError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
+from maimai_py import DivingFishProvider, LXNSProvider, IProvider, IScoreProvider, IScoreUpdateProvider, MaimaiClient, MaimaiClientMultithreading, MaimaiScores, PlayerIdentifier, InvalidPlayerIdentifierError, InvalidDeveloperTokenError, PrivacyLimitationError, Score, LevelIndex, FCType, FSType, RateType, SongType
 from typing import Optional, Any, Callable, Literal, Iterable
 from datetime import datetime
 
@@ -278,7 +278,7 @@ async def get_valid_lxtoken(lxtoken: str) -> tuple[str, str]:
         lxns_provider._check_response_player(resp)  # 获取玩家信息测试token有效性，若无效会抛出异常
         msg = '绑定落雪成绩导入token成功'
         token = lxtoken
-    except InvalidPlayerIdentifierError as e:
+    except (InvalidPlayerIdentifierError, InvalidDeveloperTokenError) as e:  # TODO: 等待maimai-py上游修复
         traceback.print_exc()
         log.error(f"落雪成绩导入token无效: {e}")
         msg = '落雪成绩导入token无效，请检查成绩导入token的有效性'
@@ -312,7 +312,7 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, bot
         msg, timenow = None, None
         timestart = datetime.now()
         
-        while retry_count := 0 <= max_retries:
+        while (retry_count := 0) <= max_retries:
             try:
                 dftoken = user[1]
                 lxtoken = user[2]
