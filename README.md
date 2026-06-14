@@ -23,11 +23,28 @@
 
 3. 由于本插件涉及到了私聊相关的内容，而目前HoshinoBot框架本体并没有对私聊功能进行相关的支持，因此需要对HoshinoBot本体进行修改：
 
-   - `msghandler.py`：去除以下内容(L10-11)：
+   - `HoshinoBot/hoshino/msghandler.py`：去除以下内容(L10-11)：
 
       ```python
       if event.detail_type != 'group':
         return
+      ```
+
+   - `HoshinoBot/hoshino/priv.py`：修改 `check_priv` 函数(L80-84)：
+
+      ```python
+      def check_priv(ev: CQEvent, require: int) -> bool:
+        if ev['message_type'] == 'group':
+          return bool(get_user_priv(ev) >= require)
+        else:
+          return False  # 不允许私聊
+      ```
+
+      为：
+
+      ```python
+      def check_priv(ev: CQEvent, require: int) -> bool:
+        return bool(get_user_priv(ev) >= require)
       ```
 
 4. 安装插件所需模块：`pip install -r requirements.txt`
