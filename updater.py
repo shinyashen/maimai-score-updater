@@ -1,12 +1,12 @@
-import asyncio, traceback, urllib3, re, requests, pathlib
+import urllib3, pathlib
 from typing import List
 
 
-import maicore
 from nonebot import NoneBot
 from hoshino.typing import CQEvent
+from .maicore import *
 from .database import UserDatabase
-from . import log, sv
+from . import sv
 
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -89,7 +89,7 @@ async def _(bot: NoneBot, ev: CQEvent):
         user_id_from_qr = None
         if ev['message_type'] == 'private' and len(args) > 0:  # 私聊且提供了参数
             if len(args) == 1:
-                msg, user_id_from_qr = await maicore.get_user_id(args[0])
+                msg, user_id_from_qr = await get_user_id(args[0])
                 if not user_id_from_qr:  # 参数格式正确但解析失败
                     await bot.send(ev, msg, at_sender=False)
                     return
@@ -126,7 +126,7 @@ async def _(bot: NoneBot, ev: CQEvent):
             msg = '怎么，还想帮别人导一导？' if special_flag else '你提供的二维码所对应账号与之前绑定的账号不匹配，请检查后重新输入'
 
         if not msg:
-            msg, timenow = await maicore.update_score(user, qr_code, special_flag, bot, ev)
+            msg, timenow = await update_score(user, qr_code, special_flag, bot, ev)
             if timenow:
                 await db.update_user(qq=qqid, lastupdate=timenow)
         await bot.send(ev, msg, at_sender=False)
@@ -142,7 +142,7 @@ async def _(bot: NoneBot, ev: CQEvent):
         msg = '绑定微信/bindwx(不带斜杠) <SGWCMAID.../https...>: 绑定微信公众号二维码，请发送二维码进行识别后复制识别的内容(以SGWCMAID开头)，或者发送二维码页面的链接(以https开头)，仅能在私聊绑定'
     elif ev['message_type'] == 'private':
         if len(args) == 1:
-            msg, user_id = await maicore.get_user_id(args[0])
+            msg, user_id = await get_user_id(args[0])
             if user_id:  # 成功解析出用户ID
                 await db.update_user(qq=qqid, userid=user_id)
         else:
@@ -163,7 +163,7 @@ async def _(bot: NoneBot, ev: CQEvent):
         msg = '绑定水鱼/binddf(不带斜杠) <水鱼成绩导入token>: 绑定水鱼成绩导入token，仅能在私聊绑定'
     elif ev['message_type'] == 'private':
         if len(args) == 1:
-            msg, token = await maicore.get_valid_dftoken(args[0])
+            msg, token = await get_valid_dftoken(args[0])
             if token:  # token有效
                 await db.update_user(qq=qqid, dftoken=token)
         else:
@@ -184,7 +184,7 @@ async def _(bot: NoneBot, ev: CQEvent):
         msg = '绑定落雪/bindlx(不带斜杠) <落雪成绩导入token>: 绑定落雪成绩导入token，仅能在私聊绑定'
     elif ev['message_type'] == 'private':
         if len(args) == 1:
-            msg, token = await maicore.get_valid_lxtoken(args[0])
+            msg, token = await get_valid_lxtoken(args[0])
             if token:  # token有效
                 await db.update_user(qq=qqid, lxtoken=token)
         else:
