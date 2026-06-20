@@ -311,8 +311,9 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, bot
     try:
         msg, timenow = None, None
         timestart = datetime.now()
+        retry_count = 0
         
-        while (retry_count := 0) <= max_retries:
+        while retry_count <= max_retries:
             try:
                 dftoken = user[1]
                 lxtoken = user[2]
