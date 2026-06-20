@@ -172,7 +172,7 @@ class MyMaimaiClient(MaimaiClientMultithreading):
         for d in target_scores_dict_list[1:]:
             common_keys.intersection_update(d.keys())
         target_scores_unique = {k: _join_rev(d[k] for d in target_scores_dict_list) for k in common_keys}
-        
+
         # 与源成绩进行比较，找出增量更新部分
         delta_scores_unique: dict[str, Score] = {}
         for score in merged_source_maimai_scores.scores:
@@ -312,7 +312,7 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, bot
         msg, timenow = None, None
         timestart = datetime.now()
         retry_count = 0
-        
+
         while retry_count <= max_retries:
             try:
                 dftoken = user[1]
@@ -328,13 +328,13 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, bot
                 arcade_provider = MyProvider()
                 arcade_player = MyProvider._ser_identifier(userid=userid, qrcode=qrcode)
                 source_providers = [(arcade_provider, arcade_player, {"name": "arcade"})]
-                
+
                 target_providers = []
                 if dftoken:
                     diving_provider = DivingFishProvider()
                     diving_player = PlayerIdentifier(credentials=dftoken)
                     target_providers.append((diving_provider, diving_player, {"name": "divingfish"}))
-                
+
                 if lxtoken:
                     lxns_provider = LXNSProvider()
                     lxns_player = PlayerIdentifier(credentials=lxtoken)
@@ -354,7 +354,7 @@ async def update_score(user, qrcode: str = None, special_flag: bool = False, bot
                 msg = f'导到{target_str}了喵！\n你这次导了{duration:.2f}秒，很厉害了喵~\n怎么导的：{"简单的导" if not qrcode else "好好的导"}' if special_flag else f'上传分数至{target_str}成功！\n本次上传用时{duration:.2f}秒\n上传方式：{"简略上传" if not qrcode else "全量上传"}'
                 log.info("分数上传成功")
                 break  # 成功则退出循环
-            
+
             except Exception as e:
                 retry_count += 1
                 if retry_count > max_retries:

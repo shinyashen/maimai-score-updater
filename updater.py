@@ -116,7 +116,7 @@ async def _(bot: NoneBot, ev: CQEvent):
             dftoken = user[1]
             lxtoken = user[2]
             userid = user[3]
-            
+
             if not (dftoken or lxtoken):
                 msg = '没绑数据站你怎么导。。。' if special_flag else '请绑定水鱼或落雪成绩导入token信息'
             if not userid:
@@ -131,7 +131,7 @@ async def _(bot: NoneBot, ev: CQEvent):
 
         else:
             msg = '几把怎么连导都不会。。。想知道怎么导？对我说“导帮助”喵' if special_flag else '未绑定任何账号，请先绑定微信二维码信息与水鱼账号，查看帮助请输入“上传分数帮助”'
-        
+
         await bot.send(ev, msg, at_sender=False)
 
 
