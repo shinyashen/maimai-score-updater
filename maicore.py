@@ -133,7 +133,7 @@ class MyMaimaiClient(MaimaiClientMultithreading):
                             )
                         )
                     source_gather_tasks.append(source_gather_task)
-        source_gather_results = await asyncio.gather(*source_gather_tasks, return_exceptions=True)
+        source_gather_results = await asyncio.gather(*source_gather_tasks)
         source_maimai_scores_list = [result for result in source_gather_results if isinstance(result, MaimaiScores)]
 
         # 合并源提供器成绩
@@ -159,7 +159,7 @@ class MyMaimaiClient(MaimaiClientMultithreading):
                             )
                         )
                     target_gather_tasks.append(target_gather_task)
-        target_gather_results = await asyncio.gather(*target_gather_tasks, return_exceptions=True)
+        target_gather_results = await asyncio.gather(*target_gather_tasks)
         target_maimai_scores_list = [result for result in target_gather_results if isinstance(result, MaimaiScores)]
 
         # 合并目标提供器成绩，原则为取歌曲、达成率和dx分数的最小交集，其他部分合并最高记录
@@ -193,7 +193,7 @@ class MyMaimaiClient(MaimaiClientMultithreading):
                             lambda t, k=kwargs: target_update_callback(delta_maimai_scores, t.exception(), k)
                         )
                     target_update_tasks.append(target_task)
-        await asyncio.gather(*target_update_tasks, return_exceptions=True)
+        await asyncio.gather(*target_update_tasks)
 
 
 maimai = MyMaimaiClient(timeout=60)
